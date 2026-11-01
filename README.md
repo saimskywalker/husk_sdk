@@ -245,7 +245,7 @@ case "greeting":
   #if HUSK_ACMEWIDGETSDK
   result(AcmeWidget.greeting(for: name))
   #else
-  result(FlutterError(code: "sdk_unavailable", message: nil, details: nil))
+  result(FlutterError(code: "vendor_sdk_missing", message: nil, details: nil))
   #endif
 ```
 

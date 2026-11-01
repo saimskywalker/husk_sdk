@@ -23,7 +23,7 @@ class AcmeWidgetPlugin : FlutterPlugin, MethodCallHandler {
                 if (greeting != null) {
                     result.success(greeting)
                 } else {
-                    result.error("sdk_unavailable", "AcmeWidgetSDK is not linked into this build", null)
+                    result.error("vendor_sdk_missing", "AcmeWidgetSDK is not linked into this build", null)
                 }
             }
             else -> result.notImplemented()

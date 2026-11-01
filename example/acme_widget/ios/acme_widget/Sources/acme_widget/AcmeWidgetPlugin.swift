@@ -19,7 +19,7 @@ public class AcmeWidgetPlugin: NSObject, FlutterPlugin {
       #if HUSK_ACMEWIDGETSDK
       result(AcmeWidget.greeting(for: name))
       #else
-      result(FlutterError(code: "sdk_unavailable", message: "AcmeWidgetSDK is not linked into this build", details: nil))
+      result(FlutterError(code: "vendor_sdk_missing", message: "AcmeWidgetSDK is not linked into this build", details: nil))
       #endif
     default:
       result(FlutterMethodNotImplemented)

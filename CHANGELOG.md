@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- The README snippet and the example plugin report a missing vendor SDK
+  with the error code `vendor_sdk_missing` (was `sdk_unavailable`). The
+  generated code is unchanged; plugins that copied the old code keep
+  working.
+
 ## 0.1.0
 
 First release.
