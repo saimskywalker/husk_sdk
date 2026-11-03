@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:husk_sdk/husk_sdk.dart';
@@ -43,6 +44,7 @@ void main() {
     final run = CliRun(fakePlugin(), ['check', '--help']);
     expect(run.exitCode, exitOk);
     expect(run.out, contains('--require-sdk'));
+    expect(run.out, contains('--json'));
   });
 
   test('init writes a spec that parses and documents the defaults', () {
@@ -140,6 +142,43 @@ void main() {
       final run = CliRun(root, ['check']);
       expect(run.exitCode, exitProblems, reason: '$run');
       expect(run.out, contains('libs/acme-widget-3.2.0.aar'));
+    });
+
+    test('--json prints sections, findings and the check exit code', () {
+      final root = fakePlugin();
+      final check = CliRun(root, ['check', '--json']);
+      expect(check.exitCode, exitProblems, reason: '$check');
+      expect(check.err, isEmpty);
+      final checkJson = jsonDecode(check.out) as Map<String, dynamic>;
+      expect(checkJson['exitCode'], exitProblems);
+      final findings = [
+        for (final section in checkJson['sections'] as List<dynamic>)
+          for (final finding
+              in (section as Map<String, dynamic>)['findings'] as List<dynamic>)
+            finding as Map<String, dynamic>,
+      ];
+      expect(findings, isNotEmpty);
+      expect(
+        findings.map((f) => f['level']),
+        everyElement(isIn(['warning', 'error'])),
+      );
+      expect(
+        findings.map((f) => f['message']),
+        contains(contains('missing: android/husk.gradle')),
+      );
+      expect(findings.first['detail'], isA<List<dynamic>>());
+
+      final doctor = CliRun(root, ['doctor', '--json']);
+      expect(doctor.exitCode, exitOk, reason: '$doctor');
+      final doctorJson = jsonDecode(doctor.out) as Map<String, dynamic>;
+      expect(doctorJson['exitCode'], exitProblems);
+      final doctorLevels = [
+        for (final section in doctorJson['sections'] as List<dynamic>)
+          for (final finding
+              in (section as Map<String, dynamic>)['findings'] as List<dynamic>)
+            (finding as Map<String, dynamic>)['level'],
+      ];
+      expect(doctorLevels, contains('info'));
     });
   });
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
@@ -120,6 +121,12 @@ ArgParser _parser() {
         'from',
         valueHelp: 'dir',
         help: 'Also look for the vendor files here.',
+      )
+      ..addFlag(
+        'json',
+        negatable: false,
+        help:
+            'Print the report as JSON, including the exit code check would use.',
       );
     if (name == 'check') {
       sub.addMultiOption(
@@ -379,16 +386,26 @@ int _report(
     from: c.option('from'),
     requireSdk: strict ? c.multiOption('require-sdk').toSet() : const {},
   );
-  var errors = 0, warnings = 0;
+  final errors = [
+    for (final s in sections)
+      for (final f in s.findings)
+        if (f.level == Level.error) f,
+  ].length;
+  // `check` fails on errors. `doctor` prints the same number and still exits 0.
+  final checkExit = errors > 0 ? exitProblems : exitOk;
+  if (c.flag('json')) {
+    o.writeln(
+      jsonEncode(_reportJson(sections, strict: strict, exitCode: checkExit)),
+    );
+    return strict ? checkExit : exitOk;
+  }
+  var warnings = 0;
   o.writeln(
     'husk_sdk ${strict ? 'check' : 'doctor'}: ${spec.sdkName} '
     '(plugin ${spec.plugin})',
   );
   for (final s in sections) {
-    final shown = strict
-        ? s.findings.where((f) => f.level.index >= Level.warning.index).toList()
-        : s.findings;
-    errors += s.findings.where((f) => f.level == Level.error).length;
+    final shown = _visible(s, strict);
     warnings += s.findings.where((f) => f.level == Level.warning).length;
     if (shown.isEmpty) continue;
     o
@@ -408,8 +425,43 @@ int _report(
       '$warnings warning${warnings == 1 ? '' : 's'}.',
     );
   if (!strict) return exitOk;
-  return errors > 0 ? exitProblems : exitOk;
+  return checkExit;
 }
+
+/// JSON shape of a `doctor` or `check` report.
+///
+/// [exitCode] is the code `check` would use. Sections and findings match
+/// the text report: `check` keeps warnings and errors, `doctor` keeps all.
+Map<String, Object> _reportJson(
+  List<Section> sections, {
+  required bool strict,
+  required int exitCode,
+}) {
+  return {
+    'sections': [
+      for (final s in sections)
+        if (_visible(s, strict).isNotEmpty)
+          {
+            'title': s.title,
+            'findings': [
+              for (final f in _visible(s, strict))
+                {
+                  'level': f.level.name,
+                  'message': f.message,
+                  'detail': f.detail,
+                },
+            ],
+          },
+    ],
+    'exitCode': exitCode,
+  };
+}
+
+List<Finding> _visible(Section section, bool strict) => strict
+    ? section.findings
+          .where((f) => f.level.index >= Level.warning.index)
+          .toList()
+    : section.findings;
 
 String _tilde(String path, Map<String, String> env) {
   final home = env['HOME'];

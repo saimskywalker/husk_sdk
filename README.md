@@ -313,8 +313,10 @@ dart run husk_sdk [-C <dir>] <command> [options]
 | `generate` | Writes or updates the generated files. `--dry-run`, `--force` (overwrite files without the generated header). | 0, 1 if a file cannot be updated, 2 |
 | `link` | Copies the binaries into `husk_vendor/`. `--from <dir>`, `--clear-swiftpm-cache`. | 0, 1 if nothing found, 2 |
 | `unlink` | Deletes the `husk_vendor/` folders. `--clear-swiftpm-cache`. | 0, 2 |
-| `doctor` | Prints everything it found. `--from <dir>`. | 0, 2 |
-| `check` | Prints warnings and errors. `--from <dir>`, `--require-sdk ios\|android` (repeatable). | 0 fine, 1 errors, 2 usage or `husk.yaml` error |
+| `doctor` | Prints everything it found. `--from <dir>`, `--json`. | 0, 2 |
+| `check` | Prints warnings and errors. `--from <dir>`, `--require-sdk ios\|android` (repeatable), `--json`. | 0 fine, 1 errors, 2 usage or `husk.yaml` error |
+
+`--json` prints `{"sections":[{"title","findings":[{"level","message","detail"}]}],"exitCode"}`. `exitCode` is the code `check` would use (0 or 1). `doctor` still exits 0.
 
 `check` fails when a generated file is missing or out of date, a plugin
 class does not register the generated channel, a found binary is broken
