@@ -38,6 +38,7 @@ class HuskSpec {
     required this.ios,
     required this.android,
     required this.dart,
+    this.isNative = false,
   });
 
   /// Reads and validates `husk.yaml` from [projectDir].
@@ -73,22 +74,32 @@ class HuskSpec {
         '$specFileName: ${e.message} (${e.span?.start.line})',
       );
     }
-    const topKeys = 'sdk plugin shim channel binary ios android dart';
-    final top = _Node(doc, '').map(topKeys);
+    // Native mode wires a plain iOS or Android app: there is no Flutter
+    // plugin, so no pubspec, method channel or Dart class.
+    final native = doc is YamlMap && doc['mode'] == 'native';
+    final top = _Node(doc, '').map(
+      native
+          ? 'mode sdk shim binary ios android'
+          : 'mode sdk plugin shim channel binary ios android dart',
+    );
+    top.child('mode').optionalString(modePattern);
     final sdk = top.child('sdk').map('name version');
     final sdkName = sdk.child('name').requiredString(identifier);
     final version = sdk.child('version').optionalString(versionPattern);
     final words = splitWords(sdkName);
-    final plugin =
-        top.child('plugin').optionalString(dartPackageName) ??
-        _pubspecName(root) ??
-        (throw SpecException(
-          '$specFileName: plugin: not set and no pubspec.yaml name to default to',
-        ));
+    final plugin = native
+        ? null
+        : top.child('plugin').optionalString(dartPackageName) ??
+              _pubspecName(root) ??
+              (throw SpecException(
+                '$specFileName: plugin: not set and no pubspec.yaml name to default to',
+              ));
     final shim =
         top.child('shim').optionalString(identifier) ?? '${sdkName}Husk';
+    // In native mode the shim's Swift package stands in for the plugin.
+    final name = plugin ?? shim;
     final channel =
-        top.child('channel').optionalString(channelPattern) ?? '$plugin/husk';
+        top.child('channel').optionalString(channelPattern) ?? '$name/husk';
     final binary = top.child('binary').mapOrEmpty('env gradle_property');
     final envVar =
         binary.child('env').optionalString(identifier) ??
@@ -97,10 +108,12 @@ class HuskSpec {
         binary.child('gradle_property').optionalString(gradlePropertyPattern) ??
         '${lowerCamel(words)}Dir';
     final iosNode = top.child('ios');
-    final ios = iosNode.isPresent ? _ios(iosNode, root, sdkName, plugin) : null;
+    final ios = iosNode.isPresent
+        ? _ios(iosNode, root, sdkName, name, native: native)
+        : null;
     final androidNode = top.child('android');
     final android = androidNode.isPresent
-        ? _android(androidNode, root, words)
+        ? _android(androidNode, root, words, native: native)
         : null;
     if (ios == null && android == null) {
       throw SpecException(
@@ -121,7 +134,7 @@ class HuskSpec {
       root: root,
       sdkName: sdkName,
       version: version,
-      plugin: plugin,
+      plugin: name,
       shim: shim,
       channel: channel,
       envVar: envVar,
@@ -129,6 +142,7 @@ class HuskSpec {
       ios: ios,
       android: android,
       dart: DartSpec(output: output, className: className),
+      isNative: native,
     );
   }
 
@@ -141,7 +155,8 @@ class HuskSpec {
   /// Vendor SDK version the project expects, if pinned.
   final String? version;
 
-  /// Name of the Flutter plugin (pubspec name).
+  /// Name of the Flutter plugin (pubspec name); in native mode, the name of
+  /// the generated Swift package, which is [shim].
   final String plugin;
 
   /// Name of the generated shim type and SwiftPM target.
@@ -164,6 +179,11 @@ class HuskSpec {
 
   /// Generated Dart API settings.
   final DartSpec dart;
+
+  /// Whether this is `mode: native`: a plain iOS or Android app without
+  /// Flutter. Native mode generates a standalone Swift package and
+  /// `husk.gradle` but no method channel and no Dart class.
+  final bool isNative;
 
   /// Compilation condition defined when the vendor SDK is linked.
   String get defineName => 'HUSK_${sdkName.toUpperCase()}';
@@ -273,8 +293,18 @@ class DartSpec {
 
 // The platform parsers read keys in a fixed order, so the first error
 // reported for a spec with several problems stays the same.
-IosSpec _ios(_Node node, String root, String sdkName, String plugin) {
-  final n = node.mapOrEmpty('xcframework package_dir podspec target');
+IosSpec _ios(
+  _Node node,
+  String root,
+  String sdkName,
+  String plugin, {
+  required bool native,
+}) {
+  final n = node.mapOrEmpty(
+    native
+        ? 'xcframework package_dir'
+        : 'xcframework package_dir podspec target',
+  );
   final packageDir = n.child('package_dir').optionalPath() ?? 'ios/$plugin';
   final podspec = n.child('podspec');
   final skipPods =
@@ -282,7 +312,7 @@ IosSpec _ios(_Node node, String root, String sdkName, String plugin) {
   final defaultPodspec = File(p.join(root, 'ios', '$plugin.podspec'));
   return IosSpec(
     packageDir: packageDir,
-    podspec: skipPods
+    podspec: native || skipPods
         ? null
         : podspec.optionalPath() ??
               (defaultPodspec.existsSync() ? 'ios/$plugin.podspec' : null),
@@ -293,9 +323,20 @@ IosSpec _ios(_Node node, String root, String sdkName, String plugin) {
   );
 }
 
-AndroidSpec _android(_Node node, String root, List<String> words) {
-  final n = node.mapOrEmpty('aar maven module_dir package source_dir');
-  final moduleDir = n.child('module_dir').optionalPath() ?? 'android';
+AndroidSpec _android(
+  _Node node,
+  String root,
+  List<String> words, {
+  required bool native,
+}) {
+  final n = node.mapOrEmpty(
+    native
+        ? 'aar maven module_dir package'
+        : 'aar maven module_dir package source_dir',
+  );
+  final moduleDir =
+      n.child('module_dir').optionalPath() ??
+      (native ? 'android/app' : 'android');
   final m = n.child('maven');
   const mavenKeys =
       'coordinates url_property url_env username_property password_property';

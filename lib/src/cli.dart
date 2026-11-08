@@ -44,6 +44,7 @@ const _commands = <String, (String, List<(String, String?, String)>)>{
         null,
         'Configure Android (default: if android/ exists).',
       ),
+      ('native', null, 'Wire a plain iOS/Android app, not a Flutter plugin.'),
       ('force', null, 'Overwrite an existing husk.yaml.'),
     ],
   ),
@@ -233,6 +234,7 @@ int _init(ArgResults c, String root, StringSink o, StringSink e) {
     androidPackage: c.option('android-package'),
     ios: c.wasParsed('ios') ? c.flag('ios') : null,
     android: c.wasParsed('android') ? c.flag('android') : null,
+    native: c.flag('native'),
   );
   file.writeAsStringSync(text);
   o
@@ -302,7 +304,7 @@ int _link(
     (r.ok ? o : e).writeln('${r.platform.padRight(8)} ${r.message}');
     anyOk |= r.ok;
   }
-  if (anyOk && spec.ios != null) _iosCaches(c, env, o);
+  if (anyOk && spec.ios != null) _iosCaches(spec, c, env, o);
   return anyOk ? exitOk : exitProblems;
 }
 
@@ -319,12 +321,17 @@ int _unlink(
     for (final r in removed) {
       o.writeln('removed  $r/');
     }
-    if (spec.ios != null) _iosCaches(c, env, o);
+    if (spec.ios != null) _iosCaches(spec, c, env, o);
   }
   return exitOk;
 }
 
-void _iosCaches(ArgResults c, Map<String, String> env, StringSink o) {
+void _iosCaches(
+  HuskSpec spec,
+  ArgResults c,
+  Map<String, String> env,
+  StringSink o,
+) {
   o.writeln();
   if (c.flag('clear-swiftpm-cache')) {
     final cleared = clearSwiftPmManifestCache(env);
@@ -341,7 +348,9 @@ void _iosCaches(ArgResults c, Map<String, String> env, StringSink o) {
       ..writeln('Re-run with --clear-swiftpm-cache, or build with any changed')
       ..writeln('environment variable (doc/traps.md).');
   }
-  o.writeln('CocoaPods: run `pod install` in the app\'s ios/ folder.');
+  if (!spec.isNative) {
+    o.writeln('CocoaPods: run `pod install` in the app\'s ios/ folder.');
+  }
 }
 
 int _report(
@@ -360,7 +369,7 @@ int _report(
   var errors = 0, warnings = 0;
   o.writeln(
     'husk_sdk ${strict ? 'check' : 'doctor'}: ${spec.sdkName} '
-    '(plugin ${spec.plugin})',
+    '(${spec.isNative ? 'native app' : 'plugin ${spec.plugin}'})',
   );
   for (final s in sections) {
     final shown = strict

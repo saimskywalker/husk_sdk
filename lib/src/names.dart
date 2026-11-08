@@ -16,6 +16,9 @@ final RegExp identifier = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 /// A pub package name.
 final RegExp dartPackageName = RegExp(r'^[a-z_][a-z0-9_]*$');
 
+/// The `mode` of a spec.
+final RegExp modePattern = RegExp(r'^(plugin|native)$');
+
 /// A version string such as `3.2.0` or `3.2.0-beta.1+5`.
 final RegExp versionPattern = RegExp(r'^[0-9A-Za-z][0-9A-Za-z.+-]*$');
 
@@ -48,6 +51,7 @@ String describePattern(RegExp pattern) =>
     {
       identifier: 'an identifier like AcmeWidgetSDK',
       dartPackageName: 'a pub package name',
+      modePattern: 'plugin or native',
       versionPattern: 'a version like 3.2.0',
       channelPattern: 'a channel name like my_plugin/husk',
       gradlePropertyPattern: 'a Gradle property name',

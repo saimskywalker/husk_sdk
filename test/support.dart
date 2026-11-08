@@ -111,6 +111,34 @@ class AcmeWidgetPlugin {
   return root;
 }
 
+/// The `husk.yaml` of a native app, used by the native mode tests.
+const String nativeSpec = '''
+mode: native
+sdk:
+  name: AcmeWidgetSDK
+  version: 3.2.0
+ios:
+android:
+  aar: 'acme-widget-*.aar'
+''';
+
+/// Creates a plain iOS and Android app without Flutter (only the files
+/// husk_sdk reads or edits) and returns its root.
+String fakeNativeApp({String spec = nativeSpec}) {
+  final root = tempDir().path;
+  write(root, 'husk.yaml', spec);
+  Directory(p.join(root, 'ios')).createSync();
+  write(root, 'android/app/build.gradle.kts', '''
+plugins {
+    id("com.android.application")
+}
+android {
+    namespace = "com.example.native_app"
+}
+''');
+  return root;
+}
+
 /// Runs the CLI in-process and captures its output.
 class CliRun {
   /// Runs `husk_sdk` with [args] against [project].

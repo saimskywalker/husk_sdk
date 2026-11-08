@@ -17,6 +17,7 @@ String initialSpec(
   String? androidPackage,
   bool? ios,
   bool? android,
+  bool native = false,
 }) {
   final withIos = ios ?? Directory(p.join(root, 'ios')).existsSync();
   final withAndroid =
@@ -27,6 +28,7 @@ String initialSpec(
     );
   }
   final minimal = [
+    if (native) 'mode: native',
     'sdk:',
     '  name: $sdkName',
     if (version != null) '  version: $version',
@@ -43,15 +45,19 @@ String initialSpec(
     '# husk.yaml: how husk_sdk wires the closed-source $sdkName into',
     '# this project. Paths are relative to this file. Commented-out',
     '# values show the defaults. Docs: https://pub.dev/packages/husk_sdk',
+    if (native) ...[
+      '# Native mode: a plain iOS/Android app, without Flutter.',
+      'mode: native',
+    ],
     'sdk:',
     '  name: $sdkName',
     version == null
         ? '  # version: 1.2.3  # check fails on a mismatch'
         : '  version: $version',
     '',
-    '# plugin: ${spec.plugin}',
+    if (!native) '# plugin: ${spec.plugin}',
     '# shim: ${spec.shim}',
-    '# channel: ${spec.channel}',
+    if (!native) '# channel: ${spec.channel}',
     '',
     '# Where `link` (and the Gradle build) look for the vendor files.',
     '# binary:',
@@ -62,8 +68,10 @@ String initialSpec(
       'ios:',
       '  # xcframework: ${iosSpec.xcframework}',
       '  # package_dir: ${iosSpec.packageDir}',
-      "  # podspec: ${iosSpec.podspec ?? 'null  # no podspec found'}",
-      '  # target: ${iosSpec.target}',
+      if (!native) ...[
+        "  # podspec: ${iosSpec.podspec ?? 'null  # no podspec found'}",
+        '  # target: ${iosSpec.target}',
+      ],
     ],
     if (androidSpec != null) ...[
       '',
@@ -76,12 +84,14 @@ String initialSpec(
       androidPackage == null
           ? '  # package: ${androidSpec.kotlinPackage}'
           : '  package: $androidPackage',
-      '  # source_dir: ${androidSpec.sourceDir}',
+      if (!native) '  # source_dir: ${androidSpec.sourceDir}',
     ],
-    '',
-    '# dart:',
-    '#   output: ${spec.dart.output}',
-    '#   class: ${spec.dart.className}',
+    if (!native) ...[
+      '',
+      '# dart:',
+      '#   output: ${spec.dart.output}',
+      '#   class: ${spec.dart.className}',
+    ],
     '',
   ].join('\n');
   // The written file must parse to the same spec.

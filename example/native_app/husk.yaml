@@ -1,0 +1,27 @@
+# husk.yaml: how husk_sdk wires the closed-source AcmeWidgetSDK into
+# this project. Paths are relative to this file. Commented-out
+# values show the defaults. Docs: https://pub.dev/packages/husk_sdk
+# Native mode: a plain iOS/Android app, without Flutter.
+mode: native
+sdk:
+  name: AcmeWidgetSDK
+  version: 3.2.0
+
+# shim: AcmeWidgetSDKHusk
+
+# Where `link` (and the Gradle build) look for the vendor files.
+# binary:
+#   env: ACME_WIDGET_SDK_DIR
+#   gradle_property: acmeWidgetSdkDir
+
+ios:
+  # xcframework: AcmeWidgetSDK.xcframework
+  # package_dir: ios/AcmeWidgetSDKHusk
+
+android:
+  aar: 'acme-widget-*.aar'
+  # Or, for a private Maven repository instead of a file:
+  # maven:
+  #   coordinates: com.example:sdk:1.2.3
+  # module_dir: android/app
+  # package: com.example.native_app

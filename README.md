@@ -1,8 +1,9 @@
 # husk_sdk
 
-**Status:** in maintenance. Bug reports and pull requests are still reviewed; new features are on hold.
+**Status:** actively maintained. Bug reports, pull requests and feature ideas are welcome.
 
-Build a Flutter plugin or app **with or without** a closed-source native SDK.
+Build a Flutter plugin or app, or a plain iOS or Android app, **with or
+without** a closed-source native SDK.
 
 Some native SDKs come as a binary you may not commit, publish or download
 in CI: an `.xcframework` for iOS and an `.aar` (or a private Maven
@@ -41,7 +42,8 @@ dart pub add --dev husk_sdk
 
 Requirements: Dart 3.8 or later for the tool. The generated files target
 Flutter's plugin layout with Swift Package Manager and/or CocoaPods on iOS
-and the Android Gradle Plugin with Kotlin on Android.
+and the Android Gradle Plugin with Kotlin on Android, or, in native mode, an
+app that uses a local Swift package and an Android app module.
 
 ## A real run
 
@@ -280,6 +282,31 @@ if (await AcmeWidgetSdkHusk.isAvailable()) {
 desktop, unit tests). In widget tests, mock the `<plugin>/husk` channel and
 call `AcmeWidgetSdkHusk.resetForTesting()` between tests.
 
+## Native apps (no Flutter)
+
+For a plain iOS or Android app, run `init --native`, which writes
+`mode: native` into `husk.yaml`. There is no pubspec, method channel or Dart
+class, so `plugin`, `channel`, `dart`, `ios.podspec`, `ios.target` and
+`android.source_dir` do not apply. `generate` writes:
+
+- **iOS:** `ios/AcmeWidgetSDKHusk/Package.swift`, a standalone Swift
+  package. Add it to the app as a local package and depend on its
+  `AcmeWidgetSDKHusk` library. The vendor `binaryTarget` is added only when
+  the xcframework is found. `AcmeWidgetSDKHusk.isAvailable` tells the app
+  which build it is, and Swift files you add to
+  `Sources/AcmeWidgetSDKHusk/` can call the SDK inside
+  `#if HUSK_ACMEWIDGETSDK`.
+- **Android:** `android/app/husk.gradle`, applied from the app module's
+  build file. It links the AAR file (or the Maven artifact) when found and
+  compiles `src/husk/stub/kotlin` otherwise. `AcmeWidgetSDKHusk.IS_AVAILABLE`
+  is the Kotlin answer, and the `linked`/`stub` twins work as above.
+
+Apply `husk.gradle` to an app module: it depends on the AAR file directly,
+which works with settings that forbid project repositories, but not in a
+library module that is packaged as an AAR. A Maven SDK still adds its
+repository to the project. `link`, `unlink`, `doctor` and `check` work as for
+a plugin. [example/native_app](example/native_app/) builds both ways in CI.
+
 ## Getting the binary to the build
 
 | | iOS, SwiftPM | iOS, CocoaPods | Android |
@@ -311,7 +338,7 @@ dart run husk_sdk [-C <dir>] <command> [options]
 
 | Command | What it does | Exit codes |
 |---|---|---|
-| `init --sdk <Name>` | Writes a commented `husk.yaml`. Options: `--sdk-version`, `--aar`, `--android-package`, `--[no-]ios`, `--[no-]android`, `--force`. | 0, 1 if it exists, 2 |
+| `init --sdk <Name>` | Writes a commented `husk.yaml`. Options: `--sdk-version`, `--aar`, `--android-package`, `--[no-]ios`, `--[no-]android`, `--native`, `--force`. | 0, 1 if it exists, 2 |
 | `generate` | Writes or updates the generated files. `--dry-run`, `--force` (overwrite files without the generated header). | 0, 1 if a file cannot be updated, 2 |
 | `link` | Copies the binaries into `husk_vendor/`. `--from <dir>`, `--clear-swiftpm-cache`. | 0, 1 if nothing found, 2 |
 | `unlink` | Deletes the `husk_vendor/` folders. `--clear-swiftpm-cache`. | 0, 2 |
@@ -326,6 +353,7 @@ not match `sdk.version`, or a vendor binary is tracked by git.
 ## husk.yaml
 
 ```yaml
+mode: plugin                   # or native: a plain iOS/Android app
 sdk:
   name: AcmeWidgetSDK          # Swift module name; required
   version: 3.2.0               # optional; check fails on a mismatch

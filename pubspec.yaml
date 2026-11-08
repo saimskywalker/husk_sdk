@@ -3,7 +3,7 @@ description: >-
   Build Flutter plugins with or without a closed-source native SDK. A Dart CLI
   that generates SwiftPM, CocoaPods and Gradle wiring that links a vendor
   xcframework and AAR when present and a stub otherwise.
-version: 0.1.0
+version: 0.2.0
 repository: https://github.com/saimskywalker/husk_sdk
 issue_tracker: https://github.com/saimskywalker/husk_sdk/issues
 topics:

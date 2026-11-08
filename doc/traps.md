@@ -106,6 +106,13 @@ A settings file that sets `repositoriesMode` to `FAIL_ON_PROJECT_REPOS`
 forbids project repositories; declare the repository in
 `dependencyResolutionManagement` instead.
 
+**The Android Gradle Plugin's built-in Kotlin compiles only `kotlin`
+source directories.** With AGP 9's built-in Kotlin, the default for a new
+app, a directory added with `sourceSets.main.java.srcDir(...)` is not
+compiled as Kotlin (`compileDebugKotlin` reports `NO-SOURCE`); the Kotlin
+Gradle plugin compiles Kotlin in both. Native mode's `husk.gradle` adds the
+shim directory with `kotlin.srcDir(...)`, which both read.
+
 **Kotlin has no conditional compilation.** Choosing between source
 directories at configuration time is the closest equivalent; both
 directories must declare the same API.
