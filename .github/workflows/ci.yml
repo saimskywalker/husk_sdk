@@ -62,7 +62,7 @@ jobs:
       # above put in place, so it needs no extra setup.
       - name: native example, build without the SDK (stub)
         run: |
-          sh example/acme_widget/example/android/gradlew -p example/native_app/android assembleDebug
+          bash example/acme_widget/example/android/gradlew -p example/native_app/android assembleDebug
           apk=example/native_app/android/app/build/outputs/apk/debug/app-debug.apk
           unzip -p "$apk" 'classes*.dex' | grep -a -q 'Lcom/example/native_app/AcmeGreeter;'
           ! unzip -p "$apk" 'classes*.dex' | grep -a -q 'Lcom/acme/widget/AcmeWidget;'
@@ -80,7 +80,7 @@ jobs:
         run: |
           dart run husk_sdk -C example/native_app link --from example/fake_vendor_sdk/dist
           dart run husk_sdk -C example/native_app check --require-sdk android
-          sh example/acme_widget/example/android/gradlew -p example/native_app/android assembleDebug
+          bash example/acme_widget/example/android/gradlew -p example/native_app/android assembleDebug
           unzip -p example/native_app/android/app/build/outputs/apk/debug/app-debug.apk 'classes*.dex' | grep -a -q 'Lcom/acme/widget/AcmeWidget;'
 
   example-ios:
