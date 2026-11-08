@@ -26,77 +26,64 @@ String initialSpec(
       'no ios/ or android/ directory in $root; pass --ios or --android',
     );
   }
-  String minimal() {
-    final b = StringBuffer('sdk:\n  name: $sdkName\n');
-    if (version != null) b.write('  version: $version\n');
-    if (withIos) b.write('ios:\n');
-    if (withAndroid) {
-      b.write('android:\n');
-      if (aar != null) b.write("  aar: '$aar'\n");
-      if (androidPackage != null) b.write('  package: $androidPackage\n');
-    }
-    return b.toString();
-  }
-
+  final minimal = [
+    'sdk:',
+    '  name: $sdkName',
+    if (version != null) '  version: $version',
+    if (withIos) 'ios:',
+    if (withAndroid) 'android:',
+    if (withAndroid && aar != null) "  aar: '$aar'",
+    if (withAndroid && androidPackage != null) '  package: $androidPackage',
+  ];
   // Parsing validates the inputs and computes every default.
-  final spec = HuskSpec.parse(minimal(), root: root);
-  final b = StringBuffer()
-    ..writeln('# husk.yaml: how husk_sdk wires the closed-source $sdkName into')
-    ..writeln('# this project. Paths are relative to this file. Commented-out')
-    ..writeln(
-      '# values show the defaults. Docs: https://pub.dev/packages/husk_sdk',
-    )
-    ..writeln('sdk:')
-    ..writeln('  name: $sdkName')
-    ..writeln(
-      version == null
-          ? '  # version: 1.2.3  # check fails on a mismatch'
-          : '  version: $version',
-    )
-    ..writeln()
-    ..writeln('# plugin: ${spec.plugin}')
-    ..writeln('# shim: ${spec.shim}')
-    ..writeln('# channel: ${spec.channel}')
-    ..writeln()
-    ..writeln(
-      '# Where `link` (and the Gradle build) look for the vendor files.',
-    )
-    ..writeln('# binary:')
-    ..writeln('#   env: ${spec.envVar}')
-    ..writeln('#   gradle_property: ${spec.gradleProperty}');
-  final i = spec.ios;
-  if (i != null) {
-    b
-      ..writeln()
-      ..writeln('ios:')
-      ..writeln('  # xcframework: ${i.xcframework}')
-      ..writeln('  # package_dir: ${i.packageDir}')
-      ..writeln('  # podspec: ${i.podspec ?? 'null  # no podspec found'}')
-      ..writeln('  # target: ${i.target}');
-  }
-  final a = spec.android;
-  if (a != null) {
-    b
-      ..writeln()
-      ..writeln('android:')
-      ..writeln(aar == null ? "  aar: '*.aar'" : "  aar: '$aar'")
-      ..writeln('  # Or, for a private Maven repository instead of a file:')
-      ..writeln('  # maven:')
-      ..writeln('  #   coordinates: com.example:sdk:1.2.3')
-      ..writeln('  # module_dir: ${a.moduleDir}')
-      ..writeln(
-        androidPackage == null
-            ? '  # package: ${a.kotlinPackage}'
-            : '  package: $androidPackage',
-      )
-      ..writeln('  # source_dir: ${a.sourceDir}');
-  }
-  b
-    ..writeln()
-    ..writeln('# dart:')
-    ..writeln('#   output: ${spec.dart.output}')
-    ..writeln('#   class: ${spec.dart.className}');
-  final text = b.toString();
+  final spec = HuskSpec.parse('${minimal.join('\n')}\n', root: root);
+  final iosSpec = spec.ios;
+  final androidSpec = spec.android;
+  final text = [
+    '# husk.yaml: how husk_sdk wires the closed-source $sdkName into',
+    '# this project. Paths are relative to this file. Commented-out',
+    '# values show the defaults. Docs: https://pub.dev/packages/husk_sdk',
+    'sdk:',
+    '  name: $sdkName',
+    version == null
+        ? '  # version: 1.2.3  # check fails on a mismatch'
+        : '  version: $version',
+    '',
+    '# plugin: ${spec.plugin}',
+    '# shim: ${spec.shim}',
+    '# channel: ${spec.channel}',
+    '',
+    '# Where `link` (and the Gradle build) look for the vendor files.',
+    '# binary:',
+    '#   env: ${spec.envVar}',
+    '#   gradle_property: ${spec.gradleProperty}',
+    if (iosSpec != null) ...[
+      '',
+      'ios:',
+      '  # xcframework: ${iosSpec.xcframework}',
+      '  # package_dir: ${iosSpec.packageDir}',
+      "  # podspec: ${iosSpec.podspec ?? 'null  # no podspec found'}",
+      '  # target: ${iosSpec.target}',
+    ],
+    if (androidSpec != null) ...[
+      '',
+      'android:',
+      "  aar: '${aar ?? '*.aar'}'",
+      '  # Or, for a private Maven repository instead of a file:',
+      '  # maven:',
+      '  #   coordinates: com.example:sdk:1.2.3',
+      '  # module_dir: ${androidSpec.moduleDir}',
+      androidPackage == null
+          ? '  # package: ${androidSpec.kotlinPackage}'
+          : '  package: $androidPackage',
+      '  # source_dir: ${androidSpec.sourceDir}',
+    ],
+    '',
+    '# dart:',
+    '#   output: ${spec.dart.output}',
+    '#   class: ${spec.dart.className}',
+    '',
+  ].join('\n');
   // The written file must parse to the same spec.
   HuskSpec.parse(text, root: root);
   return text;

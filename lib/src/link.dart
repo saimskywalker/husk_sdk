@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'locate.dart';
-import 'paths.dart';
+import 'names.dart';
 import 'spec.dart';
 
 /// One binary copied (or removed) by `link` / `unlink`.
@@ -32,67 +32,60 @@ List<LinkResult> link(
   HuskSpec spec, {
   required Map<String, String> env,
   String? from,
-}) {
-  final results = <LinkResult>[];
-  final ios = spec.ios;
-  if (ios != null) {
-    final found = locateXcframework(
-      spec,
-      env,
-      from: from,
-      includeDropDir: false,
-    );
-    if (found == null) {
-      results.add(
-        LinkResult(
-          'ios',
-          '${ios.xcframework} not found in ${_where(spec, env, from)}',
-          ok: false,
-        ),
-      );
-    } else {
-      final target = p.join(spec.resolve(ios.dropDir), ios.xcframework);
-      _replaceWith(found.path, target);
-      results.add(
-        LinkResult('ios', 'copied ${_show(found.path)} -> ${ios.dropDir}/'),
-      );
-    }
-  }
-  final android = spec.android;
-  if (android != null && android.aar != null) {
-    final found = locateAar(spec, env, from: from, includeDropDir: false);
-    if (found == null) {
-      results.add(
-        LinkResult(
-          'android',
-          'no file matching ${android.aar} in ${_where(spec, env, from)}',
-          ok: false,
-        ),
-      );
-    } else {
-      final drop = spec.resolve(android.dropDir);
-      // Drop older copies so Gradle cannot pick a stale version.
-      for (final old in matchingAars(spec, drop)) {
-        File(old).deleteSync();
-      }
-      final target = p.join(drop, p.basename(found.$1.path));
-      _replaceWith(found.$1.path, target);
-      results.add(
-        LinkResult(
-          'android',
-          'copied ${_show(found.$1.path)} -> ${android.dropDir}/',
-        ),
-      );
-    }
-  } else if (android != null) {
-    results.add(
-      LinkResult(
-        'android',
-        'uses Maven (${android.maven!.coordinates}); nothing to copy',
-      ),
+}) => [
+  if (spec.ios case final ios?) _linkXcframework(spec, ios, env, from),
+  if (spec.android case final android?)
+    android.aar == null
+        ? LinkResult(
+            'android',
+            'uses Maven (${android.maven!.coordinates}); nothing to copy',
+          )
+        : _linkAar(spec, android, env, from),
+];
+
+LinkResult _linkXcframework(
+  HuskSpec spec,
+  IosSpec ios,
+  Map<String, String> env,
+  String? from,
+) {
+  final found = locateXcframework(spec, env, from: from, includeDropDir: false);
+  if (found == null) {
+    return LinkResult(
+      'ios',
+      '${ios.xcframework} not found in ${_where(spec, env, from)}',
+      ok: false,
     );
   }
-  return results;
+  _replaceWith(found.path, p.join(spec.resolve(ios.dropDir), ios.xcframework));
+  return LinkResult('ios', 'copied ${_show(found.path)} -> ${ios.dropDir}/');
+}
+
+LinkResult _linkAar(
+  HuskSpec spec,
+  AndroidSpec android,
+  Map<String, String> env,
+  String? from,
+) {
+  final found = locateAar(spec, env, from: from, includeDropDir: false);
+  if (found == null) {
+    return LinkResult(
+      'android',
+      'no file matching ${android.aar} in ${_where(spec, env, from)}',
+      ok: false,
+    );
+  }
+  final source = found.$1.path;
+  final drop = spec.resolve(android.dropDir);
+  // Drop older copies so Gradle cannot pick a stale version.
+  for (final old in matchingAars(spec, drop)) {
+    File(old).deleteSync();
+  }
+  _replaceWith(source, p.join(drop, p.basename(source)));
+  return LinkResult(
+    'android',
+    'copied ${_show(source)} -> ${android.dropDir}/',
+  );
 }
 
 /// Deletes Swift Package Manager's manifest cache under the user's home
@@ -117,13 +110,11 @@ String? clearSwiftPmManifestCache(Map<String, String> env) {
 /// Deletes the drop directories. Returns the ones that existed.
 List<String> unlink(HuskSpec spec) {
   final removed = <String>[];
-  for (final dir in [spec.ios?.dropDir, spec.android?.dropDir]) {
-    if (dir == null) continue;
+  for (final dir in [spec.ios?.dropDir, spec.android?.dropDir].nonNulls) {
     final d = Directory(spec.resolve(dir));
-    if (d.existsSync()) {
-      d.deleteSync(recursive: true);
-      removed.add(dir);
-    }
+    if (!d.existsSync()) continue;
+    d.deleteSync(recursive: true);
+    removed.add(dir);
   }
   return removed;
 }
@@ -159,10 +150,10 @@ void _replaceWith(String source, String target) {
 
 void _delete(String path) {
   switch (FileSystemEntity.typeSync(path, followLinks: false)) {
-    case FileSystemEntityType.directory:
-      Directory(path).deleteSync(recursive: true);
     case FileSystemEntityType.notFound:
       break;
+    case FileSystemEntityType.directory:
+      Directory(path).deleteSync(recursive: true);
     case FileSystemEntityType.link:
       Link(path).deleteSync();
     default:

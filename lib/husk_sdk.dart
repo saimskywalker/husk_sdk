@@ -16,6 +16,7 @@ export 'src/inspect/xcframework.dart'
     show XcSlice, XcframeworkInfo, inspectXcframework;
 export 'src/link.dart'
     show LinkResult, clearSwiftPmManifestCache, copyTree, link, unlink;
+export 'src/names.dart' show dropDirName, normalizeRelative;
 export 'src/output.dart'
     show
         BlockEdit,
@@ -27,7 +28,6 @@ export 'src/output.dart'
         PlannedFile,
         applyPlan,
         generatedMarker;
-export 'src/paths.dart' show dropDirName, normalizeRelative;
 export 'src/report.dart' show Finding, Level, Section;
 export 'src/spec.dart'
     show

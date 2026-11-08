@@ -43,45 +43,48 @@ Object? _parseXml(String text) {
 
 Object? _xmlValue(XmlElement e, int depth) {
   if (depth > 64) throw const FormatException('property list nested too deep');
-  switch (e.name.local) {
-    case 'dict':
-      final map = <String, Object?>{};
-      final children = e.childElements.toList();
-      if (children.length.isOdd) {
-        throw const FormatException('<dict> has a key without a value');
-      }
-      for (var i = 0; i < children.length; i += 2) {
-        if (children[i].name.local != 'key') {
-          throw const FormatException('<dict> entry does not start with <key>');
-        }
-        map[children[i].innerText] = _xmlValue(children[i + 1], depth + 1);
-      }
-      return map;
-    case 'array':
-      return [for (final c in e.childElements) _xmlValue(c, depth + 1)];
-    case 'string':
-      return e.innerText;
-    case 'integer':
-      return int.tryParse(e.innerText.trim()) ??
-          (throw FormatException('bad <integer> "${e.innerText}"'));
-    case 'real':
-      return double.tryParse(e.innerText.trim()) ??
-          (throw FormatException('bad <real> "${e.innerText}"'));
-    case 'true':
-      return true;
-    case 'false':
-      return false;
-    case 'date':
-      return DateTime.tryParse(e.innerText.trim()) ??
-          (throw FormatException('bad <date> "${e.innerText}"'));
-    case 'data':
-      try {
-        return base64.decode(e.innerText.replaceAll(RegExp(r'\s'), ''));
-      } on FormatException {
-        throw const FormatException('bad <data> payload');
-      }
-    default:
-      throw FormatException('unknown property list element <${e.name.local}>');
+  return switch (e.name.local) {
+    'dict' => _xmlDict(e, depth),
+    'array' => [for (final c in e.childElements) _xmlValue(c, depth + 1)],
+    'string' => e.innerText,
+    'integer' =>
+      int.tryParse(e.innerText.trim()) ??
+          (throw FormatException('bad <integer> "${e.innerText}"')),
+    'real' =>
+      double.tryParse(e.innerText.trim()) ??
+          (throw FormatException('bad <real> "${e.innerText}"')),
+    'true' => true,
+    'false' => false,
+    'date' =>
+      DateTime.tryParse(e.innerText.trim()) ??
+          (throw FormatException('bad <date> "${e.innerText}"')),
+    'data' => _base64(e.innerText),
+    final other => throw FormatException(
+      'unknown property list element <$other>',
+    ),
+  };
+}
+
+Map<String, Object?> _xmlDict(XmlElement e, int depth) {
+  final children = e.childElements.toList();
+  if (children.length.isOdd) {
+    throw const FormatException('<dict> has a key without a value');
+  }
+  final map = <String, Object?>{};
+  for (var i = 0; i < children.length; i += 2) {
+    if (children[i].name.local != 'key') {
+      throw const FormatException('<dict> entry does not start with <key>');
+    }
+    map[children[i].innerText] = _xmlValue(children[i + 1], depth + 1);
+  }
+  return map;
+}
+
+Uint8List _base64(String text) {
+  try {
+    return base64.decode(text.replaceAll(RegExp(r'\s'), ''));
+  } on FormatException {
+    throw const FormatException('bad <data> payload');
   }
 }
 
@@ -154,31 +157,28 @@ class _BinaryPlist {
       throw const FormatException('binary plist object out of range');
     }
     final marker = bytes[at];
-    final type = marker >> 4;
     final info = marker & 0x0f;
-    switch (type) {
+    switch (marker >> 4) {
       case 0x0:
-        if (info == 0x8) return false;
-        if (info == 0x9) return true;
-        if (info == 0x0) return null;
-        throw const FormatException('unsupported binary plist marker');
+        return switch (info) {
+          0x8 => false,
+          0x9 => true,
+          0x0 => null,
+          _ => throw const FormatException('unsupported binary plist marker'),
+        };
       case 0x1:
         final size = 1 << info;
         if (size > 8) throw const FormatException('integer too large');
-        if (size == 8) {
-          _uint(at + 1, 8); // bounds check
-          return data.getInt64(at + 1);
-        }
-        return _uint(at + 1, size);
+        if (size < 8) return _uint(at + 1, size);
+        _uint(at + 1, 8); // bounds check
+        return data.getInt64(at + 1);
+      case 0x2 when info == 2:
+        _uint(at + 1, 4);
+        return data.getFloat32(at + 1).toDouble();
+      case 0x2 when info == 3:
+        _uint(at + 1, 8);
+        return data.getFloat64(at + 1);
       case 0x2:
-        if (info == 2) {
-          _uint(at + 1, 4);
-          return data.getFloat32(at + 1).toDouble();
-        }
-        if (info == 3) {
-          _uint(at + 1, 8);
-          return data.getFloat64(at + 1);
-        }
         throw const FormatException('unsupported real size');
       case 0x3:
         _uint(at + 1, 8);
@@ -188,52 +188,47 @@ class _BinaryPlist {
         ).add(Duration(microseconds: (seconds * 1000000).round()));
       case 0x4:
         final (len, start) = _length(info, at);
-        if (start + len > bytes.length) {
-          throw const FormatException('data out of range');
-        }
+        _checkEnd(start + len, 'data');
         return Uint8List.fromList(bytes.sublist(start, start + len));
       case 0x5:
         final (len, start) = _length(info, at);
-        if (start + len > bytes.length) {
-          throw const FormatException('string out of range');
-        }
+        _checkEnd(start + len, 'string');
         return latin1.decode(bytes.sublist(start, start + len));
       case 0x6:
         final (len, start) = _length(info, at);
-        if (start + len * 2 > bytes.length) {
-          throw const FormatException('string out of range');
-        }
-        final units = [
+        _checkEnd(start + len * 2, 'string');
+        return String.fromCharCodes([
           for (var i = 0; i < len; i++) data.getUint16(start + i * 2),
-        ];
-        return String.fromCharCodes(units);
+        ]);
       case 0xA:
         final (len, start) = _length(info, at);
         _checkRefs(start, len);
-        return [
-          for (var i = 0; i < len; i++)
-            _object(_uint(start + i * _refSize, _refSize), depth + 1),
-        ];
+        return [for (var i = 0; i < len; i++) _ref(start, i, depth)];
       case 0xD:
         final (len, start) = _length(info, at);
         _checkRefs(start, len * 2);
         final map = <String, Object?>{};
         for (var i = 0; i < len; i++) {
-          final key = _object(_uint(start + i * _refSize, _refSize), depth + 1);
+          final key = _ref(start, i, depth);
           if (key is! String) {
             throw const FormatException('dictionary key is not a string');
           }
-          map[key] = _object(
-            _uint(start + (len + i) * _refSize, _refSize),
-            depth + 1,
-          );
+          map[key] = _ref(start, len + i, depth);
         }
         return map;
-      default:
+      case final type:
         throw FormatException(
           'unsupported binary plist type 0x${type.toRadixString(16)}',
         );
     }
+  }
+
+  /// The object that the [i]th reference of a collection at [start] names.
+  Object? _ref(int start, int i, int depth) =>
+      _object(_uint(start + i * _refSize, _refSize), depth + 1);
+
+  void _checkEnd(int end, String what) {
+    if (end > bytes.length) throw FormatException('$what out of range');
   }
 
   void _checkRefs(int start, int count) {

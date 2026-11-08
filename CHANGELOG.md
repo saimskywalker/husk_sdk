@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Internal simplification: less code, no change in behaviour.
 - The README snippet and the example plugin report a missing vendor SDK
   with the error code `vendor_sdk_missing` (was `sdk_unavailable`). The
   generated code is unchanged; plugins that copied the old code keep

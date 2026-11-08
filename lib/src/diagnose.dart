@@ -8,7 +8,6 @@ import 'inspect/xcframework.dart';
 import 'locate.dart';
 import 'names.dart';
 import 'output.dart';
-import 'paths.dart';
 import 'report.dart';
 import 'spec.dart';
 import 'templates.dart';
@@ -22,17 +21,31 @@ List<Section> diagnose(
   required Map<String, String> env,
   String? from,
   Set<String> requireSdk = const {},
-}) {
-  final sections = <Section>[];
-  if (spec.ios != null) sections.add(_ios(spec, env, from, requireSdk));
-  if (spec.android != null) {
-    sections.add(_android(spec, env, from, requireSdk));
-  }
-  sections.add(_generated(spec));
-  final git = _git(spec);
-  if (git != null) sections.add(git);
-  return sections;
-}
+}) => [
+  if (spec.ios != null) _ios(spec, env, from, requireSdk),
+  if (spec.android != null) _android(spec, env, from, requireSdk),
+  _generated(spec),
+  ?_git(spec),
+];
+
+/// The finding for a vendor binary that was not found.
+Finding _notFound(
+  HuskSpec spec,
+  String platform,
+  Map<String, String> env,
+  String? from,
+  Set<String> requireSdk, {
+  required String dropDir,
+  String also = '',
+}) => Finding(
+  requireSdk.contains(platform) ? Level.error : Level.info,
+  'not found: builds use the ${spec.shim} stub',
+  detail: [
+    'looked in ${from != null ? '--from' : '\$${spec.envVar}'}'
+        '${(from ?? env[spec.envVar]) == null ? ' (not set)' : ''}'
+        ' and $dropDir/$also',
+  ],
+);
 
 Section _ios(
   HuskSpec spec,
@@ -44,14 +57,8 @@ Section _ios(
   final s = Section('iOS: ${ios.xcframework}');
   final found = locateXcframework(spec, env, from: from);
   if (found == null) {
-    s.add(
-      requireSdk.contains('ios') ? Level.error : Level.info,
-      'not found: builds use the ${spec.shim} stub',
-      detail: [
-        'looked in ${from != null ? '--from' : '\$${spec.envVar}'}'
-            '${(from ?? env[spec.envVar]) == null ? ' (not set)' : ''}'
-            ' and ${ios.dropDir}/',
-      ],
+    s.findings.add(
+      _notFound(spec, 'ios', env, from, requireSdk, dropDir: ios.dropDir),
     );
   } else {
     final info = inspectXcframework(found.path);
@@ -139,15 +146,16 @@ Section _android(
   } else {
     final found = locateAar(spec, env, from: from);
     if (found == null) {
-      s.add(
-        requireSdk.contains('android') ? Level.error : Level.info,
-        'not found: builds use the ${spec.shim} stub',
-        detail: [
-          'looked in ${from != null ? '--from' : '\$${spec.envVar}'}'
-              '${(from ?? env[spec.envVar]) == null ? ' (not set)' : ''}'
-              ' and ${android.dropDir}/; Gradle also reads the property '
-              '${spec.gradleProperty}',
-        ],
+      s.findings.add(
+        _notFound(
+          spec,
+          'android',
+          env,
+          from,
+          requireSdk,
+          dropDir: android.dropDir,
+          also: '; Gradle also reads the property ${spec.gradleProperty}',
+        ),
       );
     } else {
       final (located, others) = found;
@@ -243,24 +251,15 @@ void _wiring(
 
 Section _generated(HuskSpec spec) {
   final s = Section('Generated files');
-  final outcomes = applyPlan(spec.root, planFiles(spec), dryRun: true);
-  for (final o in outcomes) {
-    switch (o.status) {
-      case FileStatus.unchanged:
-        s.add(Level.ok, 'up to date: ${o.path}');
-      case FileStatus.created:
-        s.add(
-          Level.error,
-          'missing: ${o.path} (run `dart run husk_sdk generate`)',
-        );
-      case FileStatus.updated:
-        s.add(
-          Level.error,
-          'out of date: ${o.path} (run `dart run husk_sdk generate`)',
-        );
-      case FileStatus.failed:
-        s.add(Level.error, '${o.path}: ${o.message}');
-    }
+  const regenerate = '(run `dart run husk_sdk generate`)';
+  for (final o in applyPlan(spec.root, planFiles(spec), dryRun: true)) {
+    final (level, message) = switch (o.status) {
+      FileStatus.unchanged => (Level.ok, 'up to date: ${o.path}'),
+      FileStatus.created => (Level.error, 'missing: ${o.path} $regenerate'),
+      FileStatus.updated => (Level.error, 'out of date: ${o.path} $regenerate'),
+      FileStatus.failed => (Level.error, '${o.path}: ${o.message}'),
+    };
+    s.add(level, message);
   }
   return s;
 }
@@ -268,7 +267,7 @@ Section _generated(HuskSpec spec) {
 /// Reports vendor binaries tracked by git. Returns null outside a git
 /// work tree or without git.
 Section? _git(HuskSpec spec) {
-  ProcessResult result;
+  final ProcessResult result;
   try {
     result = Process.runSync('git', [
       'ls-files',
@@ -282,8 +281,7 @@ Section? _git(HuskSpec spec) {
   if (result.exitCode != 0) return null;
   final tracked = (result.stdout as String)
       .split('\x00')
-      .where((f) => f.isNotEmpty)
-      .toList();
+      .where((f) => f.isNotEmpty);
   final aar = spec.android?.aar;
   final aarPattern = aar == null ? null : RegExp(globToRegExpSource(aar));
   final xcName = spec.ios?.xcframework;
@@ -305,7 +303,7 @@ Section? _git(HuskSpec spec) {
     s.add(
       Level.error,
       'vendor binaries are tracked by git; remove them with `git rm --cached`',
-      detail: (hits.toList()..sort()),
+      detail: hits.toList()..sort(),
     );
   }
   return s;
