@@ -25,6 +25,11 @@ Hand-written: one registration line in each plugin class, and the vendor
 calls guarded by `#if HUSK_ACMEWIDGETSDK` (Swift) or kept in
 `src/husk/linked/` with a stub twin (Kotlin).
 
+`native_app/` is the same SDK wired into a plain iOS and Android app
+without Flutter (`mode: native`): a generated Swift package in
+`ios/AcmeWidgetSDKHusk/` and `android/app/husk.gradle`, plus hand-written
+`AcmeGreeter` twins.
+
 Try it from the repository root:
 
 ```bash

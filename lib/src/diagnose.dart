@@ -94,6 +94,8 @@ Section _ios(
       );
     }
   }
+  // Native mode generates the whole Package.swift and has no channel.
+  if (spec.isNative) return s;
   final manifest = File(spec.resolve(ios.manifest));
   if (manifest.existsSync()) {
     final text = manifest.readAsStringSync();
@@ -187,6 +189,7 @@ Section _android(
   if (!File(spec.resolve(build)).existsSync()) {
     s.add(Level.error, '$build does not exist');
   }
+  if (spec.isNative) return s;
   _wiring(
     s,
     spec,

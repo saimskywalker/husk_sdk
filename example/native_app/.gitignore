@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+
+# BEGIN husk_sdk: generated from husk.yaml, do not edit. Regenerate with `dart run husk_sdk generate`.
+# Vendor binaries copied in by `dart run husk_sdk link`. Never commit or
+# publish them.
+/ios/AcmeWidgetSDKHusk/husk_vendor/
+/android/app/husk_vendor/
+# END husk_sdk

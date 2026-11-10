@@ -17,7 +17,7 @@ const _header =
 List<PlannedFile> planFiles(HuskSpec spec) => [
   ...?_ios(spec),
   ...?_android(spec),
-  OwnedFile(spec.dart.output, dartApi(spec)),
+  if (!spec.isNative) OwnedFile(spec.dart.output, dartApi(spec)),
   BlockEdit(
     '.gitignore',
     comment: '#',
@@ -67,7 +67,9 @@ List<PlannedFile>? _ios(HuskSpec spec) {
   if (ios == null) return null;
   final hasManifest = File(spec.resolve(ios.manifest)).existsSync();
   return [
-    if (hasManifest || ios.podspec == null)
+    if (spec.isNative)
+      OwnedFile(ios.manifest, swiftPackage(spec))
+    else if (hasManifest || ios.podspec == null)
       BlockEdit(
         ios.manifest,
         comment: '//',
@@ -79,10 +81,11 @@ List<PlannedFile>? _ios(HuskSpec spec) {
         ),
       ),
     OwnedFile('${shimSourceDir(spec)}/${spec.shim}.swift', swiftShim(spec)),
-    OwnedFile(
-      '${pluginSourceDir(spec)}/${channelType(spec)}.swift',
-      swiftChannel(spec),
-    ),
+    if (!spec.isNative)
+      OwnedFile(
+        '${pluginSourceDir(spec)}/${channelType(spec)}.swift',
+        swiftChannel(spec),
+      ),
     if (ios.podspec != null)
       BlockEdit(
         ios.podspec!,
@@ -147,15 +150,40 @@ List<String> swiftPmBlock(HuskSpec spec) {
     'if let path = $v {',
     '    package.targets.append(.binaryTarget(name: "${spec.sdkName}", path: path))',
     '}',
-    'for target in package.targets where target.name == "${ios.target}" {',
-    '    target.dependencies.append(.target(name: "${spec.shim}"))',
-    '    if $v != nil {',
-    '        target.dependencies.append(.target(name: "${spec.sdkName}"))',
-    '        target.swiftSettings = (target.swiftSettings ?? []) + [.define("${spec.defineName}")]',
-    '    }',
-    '}',
+    if (!spec.isNative) ...[
+      'for target in package.targets where target.name == "${ios.target}" {',
+      '    target.dependencies.append(.target(name: "${spec.shim}"))',
+      '    if $v != nil {',
+      '        target.dependencies.append(.target(name: "${spec.sdkName}"))',
+      '        target.swiftSettings = (target.swiftSettings ?? []) + [.define("${spec.defineName}")]',
+      '    }',
+      '}',
+    ],
   ];
 }
+
+/// Native mode's standalone `Package.swift`: the shim target as a library
+/// the app depends on, plus the [swiftPmBlock] that links the vendor binary.
+String swiftPackage(HuskSpec spec) =>
+    '''
+// swift-tools-version: 5.9
+$_header
+//
+// Add this package to the app (Xcode: File > Add Package Dependencies >
+// Add Local) and depend on the ${spec.shim} library. Swift files you add to
+// Sources/${spec.shim}/ are built with it and can use ${spec.sdkName} inside
+// `#if ${spec.defineName}`.
+
+import PackageDescription
+
+let package = Package(
+    name: "${spec.shim}",
+    products: [.library(name: "${spec.shim}", targets: ["${spec.shim}"])],
+    targets: []
+)
+
+${swiftPmBlock(spec).join('\n')}
+''';
 
 /// Lines of the block inserted into the plugin's podspec.
 List<String> podspecBlock(HuskSpec spec) {
@@ -268,10 +296,11 @@ List<PlannedFile>? _android(HuskSpec spec) {
         kts ? 'apply(from = "husk.gradle")' : "apply from: 'husk.gradle'",
       ],
     ),
-    OwnedFile(
-      '$module/${android.sourceDir}/$pkgPath/${channelType(spec)}.kt',
-      kotlinChannel(spec),
-    ),
+    if (!spec.isNative)
+      OwnedFile(
+        '$module/${android.sourceDir}/$pkgPath/${channelType(spec)}.kt',
+        kotlinChannel(spec),
+      ),
     for (final linked in [true, false])
       OwnedFile(
         '$module/${linked ? linkedSourceDir : stubSourceDir}/$pkgPath/${spec.shim}.kt',
@@ -284,6 +313,10 @@ List<PlannedFile>? _android(HuskSpec spec) {
 String gradleScript(HuskSpec spec) {
   final android = spec.android!;
   final maven = android.maven;
+  // The Kotlin Gradle plugin, which Flutter plugins use, compiles Kotlin in
+  // `java` source directories; the Android Gradle Plugin's built-in Kotlin,
+  // the default for a new app, compiles only `kotlin` ones. Both read those.
+  final sources = spec.isNative ? 'kotlin' : 'java';
   final b = StringBuffer()
     ..writeln(_header)
     ..writeln('//');
@@ -316,22 +349,10 @@ if (!huskDisabled) {
         huskFind(file('$dropDirName').path)
 }
 
-android.sourceSets.main.java.srcDir(huskAar ? '$linkedSourceDir' : '$stubSourceDir')
+android.sourceSets.main.$sources.srcDir(huskAar ? '$linkedSourceDir' : '$stubSourceDir')
 if (huskAar) {
     logger.lifecycle("husk_sdk: linking ${spec.sdkName} from \${huskAar}")
-    // A direct files(...) dependency on an AAR breaks the plugin's own AAR
-    // task (bundle*Aar), which Flutter runs. A flat directory repository
-    // turns it into a module dependency instead. The app resolves this
-    // plugin's dependencies, so every project gets the repository.
-    def huskRepoDir = huskAar.parentFile
-    rootProject.allprojects { p ->
-        p.repositories {
-            flatDir { dirs huskRepoDir }
-        }
-    }
-    dependencies {
-        implementation(name: huskAar.name - ~/\\.aar\$/, ext: 'aar')
-    }
+${spec.isNative ? _nativeAarDependency : _pluginAarDependency}
 } else {
     logger.info('husk_sdk: ${spec.sdkName} AAR not found, building the stub')
 }
@@ -350,7 +371,7 @@ def huskRepo = providers.gradleProperty('${maven.urlProperty}')
     .getOrNull()
 def huskLinked = !huskDisabled && huskRepo != null && !huskRepo.isEmpty()
 
-android.sourceSets.main.java.srcDir(huskLinked ? '$linkedSourceDir' : '$stubSourceDir')
+android.sourceSets.main.$sources.srcDir(huskLinked ? '$linkedSourceDir' : '$stubSourceDir')
 if (huskLinked) {
     logger.lifecycle("husk_sdk: linking ${maven.coordinates} from \${huskRepo}")
     // The app resolves this plugin's dependencies, so every project needs
@@ -388,6 +409,31 @@ if (huskLinked) {
   }
   return b.toString();
 }
+
+// A Flutter plugin is built as an AAR, so it needs the AAR as a module
+// dependency; an app module may depend on the file itself, which also works
+// with settings that forbid project repositories (FAIL_ON_PROJECT_REPOS).
+const _pluginAarDependency = r'''
+    // A direct files(...) dependency on an AAR breaks the plugin's own AAR
+    // task (bundle*Aar), which Flutter runs. A flat directory repository
+    // turns it into a module dependency instead. The app resolves this
+    // plugin's dependencies, so every project gets the repository.
+    def huskRepoDir = huskAar.parentFile
+    rootProject.allprojects { p ->
+        p.repositories {
+            flatDir { dirs huskRepoDir }
+        }
+    }
+    dependencies {
+        implementation(name: huskAar.name - ~/\.aar$/, ext: 'aar')
+    }''';
+
+const _nativeAarDependency = '''
+    // Apply this script to an app module: it may depend on the AAR file
+    // directly, which a library module that is packaged as an AAR may not.
+    dependencies {
+        implementation files(huskAar)
+    }''';
 
 /// The Kotlin method channel handler, in the plugin's main source set.
 String kotlinChannel(HuskSpec spec) =>

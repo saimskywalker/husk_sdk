@@ -32,8 +32,10 @@ jobs:
       - run: dart test
       - name: pub publish dry run
         run: dart pub publish --dry-run
-      - name: example is generated and wired (no SDK present)
-        run: dart run husk_sdk -C example/acme_widget check
+      - name: examples are generated and wired (no SDK present)
+        run: |
+          dart run husk_sdk -C example/acme_widget check
+          dart run husk_sdk -C example/native_app check
 
   example-android:
     name: example, Android debug, with and without the fake SDK
@@ -56,6 +58,14 @@ jobs:
         working-directory: example/acme_widget/example
         run: |
           ! unzip -p build/app/outputs/flutter-apk/app-debug.apk 'classes*.dex' | grep -a -q 'Lcom/acme/widget/AcmeWidget;'
+      # The native example reuses the Gradle wrapper that the Flutter build
+      # above put in place, so it needs no extra setup.
+      - name: native example, build without the SDK (stub)
+        run: |
+          bash example/acme_widget/example/android/gradlew -p example/native_app/android assembleDebug
+          apk=example/native_app/android/app/build/outputs/apk/debug/app-debug.apk
+          unzip -p "$apk" 'classes*.dex' | grep -a -q 'Lcom/example/native_app/AcmeGreeter;'
+          ! unzip -p "$apk" 'classes*.dex' | grep -a -q 'Lcom/acme/widget/AcmeWidget;'
       - name: build the fake SDK and link it
         run: |
           example/fake_vendor_sdk/build.sh android
@@ -66,6 +76,12 @@ jobs:
         run: |
           flutter build apk --debug
           unzip -p build/app/outputs/flutter-apk/app-debug.apk 'classes*.dex' | grep -a -q 'Lcom/acme/widget/AcmeWidget;'
+      - name: native example, build with the SDK
+        run: |
+          dart run husk_sdk -C example/native_app link --from example/fake_vendor_sdk/dist
+          dart run husk_sdk -C example/native_app check --require-sdk android
+          bash example/acme_widget/example/android/gradlew -p example/native_app/android assembleDebug
+          unzip -p example/native_app/android/app/build/outputs/apk/debug/app-debug.apk 'classes*.dex' | grep -a -q 'Lcom/acme/widget/AcmeWidget;'
 
   example-ios:
     name: example, iOS simulator, with and without the fake SDK
@@ -82,6 +98,11 @@ jobs:
       - name: build without the SDK (stub)
         working-directory: example/acme_widget/example
         run: flutter build ios --simulator --debug --no-codesign
+      - name: native example, build the Swift package without the SDK (stub)
+        working-directory: example/native_app/ios/AcmeWidgetSDKHusk
+        run: |
+          xcodebuild -scheme AcmeWidgetSDKHusk -destination 'generic/platform=iOS Simulator' build | tee "$RUNNER_TEMP/native-stub.log"
+          ! grep -q HUSK_ACMEWIDGETSDK "$RUNNER_TEMP/native-stub.log"
       - name: build the fake SDK and link it
         run: |
           example/fake_vendor_sdk/build.sh ios
@@ -94,3 +115,10 @@ jobs:
         run: |
           flutter build ios --simulator --debug --no-codesign
           strings -a build/ios/iphonesimulator/Runner.app/Runner.debug.dylib | grep -q 'from AcmeWidgetSDK'
+      - name: native example, build the Swift package with the SDK
+        run: |
+          dart run husk_sdk -C example/native_app link --from example/fake_vendor_sdk/dist --clear-swiftpm-cache
+          dart run husk_sdk -C example/native_app check --require-sdk ios
+          cd example/native_app/ios/AcmeWidgetSDKHusk
+          xcodebuild -scheme AcmeWidgetSDKHusk -destination 'generic/platform=iOS Simulator' build | tee "$RUNNER_TEMP/native-linked.log"
+          grep -q HUSK_ACMEWIDGETSDK "$RUNNER_TEMP/native-linked.log"
