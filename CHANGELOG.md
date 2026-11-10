@@ -2,6 +2,9 @@
 
 ## 0.2.0
 
+- `doctor` and `check` accept `--json`. It prints the same report as JSON
+  (`schemaVersion` 1, `sections`, findings with `level`, `message` and `detail`, and the exit
+  code `check` would use). Process exit codes are unchanged.
 - Native mode for plain iOS and Android apps without Flutter: `mode: native`
   in `husk.yaml` (or `init --native`) makes `generate` write a standalone
   Swift package and a `husk.gradle` for the app module, which link the
