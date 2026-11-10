@@ -45,8 +45,32 @@ Never commit a vendor binary, not even a fake one; `build.sh` makes them.
 
 ## Pull requests
 
-Small, focused commits with clear messages. Run the commands above before
-pushing.
+Small, focused commits with clear messages, in English. Run the commands
+above before pushing; every CI check must pass before a pull request can be
+merged. The `PR rules` check enforces these:
+
+- **Issue first.** Open an issue and wait until a maintainer labels it
+  `accepted`, then write `Closes #N` in the pull request.
+- **Tests.** Every change to `lib/`, `bin/` or the Dart, Kotlin, Java or
+  Swift sources of the projects under `example/` needs a test change under
+  `test/` (or an example's own test folder). A bug fix needs a test that
+  fails without the fix.
+- **Small.** At most 400 changed lines (lock files not counted), one issue
+  per pull request.
+- **No suppressions.** No `// ignore:`, `@Suppress(`, `@SuppressWarnings(` or
+  `swiftlint:disable`, no changes to any `analysis_options.yaml`. Fix the
+  finding.
+- **At most 2 open pull requests** per person.
+
+If a rule really does not fit your change, say why in the description. A
+maintainer can waive it with a label (`no-tests-needed`, `large-change` or
+`suppression-ok`).
+
+## Legal notice
+
+By submitting a contribution you confirm that you wrote it, that you have the
+right to submit it, and that it may be distributed under the project license
+(see [LICENSE](LICENSE)).
 
 ## AI-assisted contributions
 
@@ -55,11 +79,17 @@ Using AI tools is fine; please just be open about it.
 - Say in the PR description which AI tools you used, if any: none, some or
   most, plus the tool or agent and the model (for example "Claude Code,
   Opus 5.5" or "Copilot, GPT-5").
-- Write the PR description and any issues yourself, in your own words. Short,
-  plain descriptions are welcome; please don't paste generated text.
+- Please write the PR description in your own words; short and plain is fine.
+  It shows us what you understood about the change. Please don't paste
+  generated text.
 - Read, run and test every line you submit, and be ready to explain it in
-  review.
-- PRs without the disclosure may be closed.
+  review. If you don't understand what a line does, don't submit it.
+- Keep the change focused. Agents like to add unrelated "improvements",
+  long comments and dead code; remove them before you open the pull request.
+- Pull requests that are raw, unreviewed agent output will be closed.
+- If you use an agent, point it at [AGENTS.md](AGENTS.md).
+- If the disclosure is missing, a check adds a reminder to the PR. It does
+  not fail the PR, but a maintainer will ask about it before merging.
 
 ## Stay in touch
 

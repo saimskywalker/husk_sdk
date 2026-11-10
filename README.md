@@ -1,5 +1,7 @@
 # husk_sdk
 
+**Status:** in maintenance. Bug reports and pull requests are still reviewed; new features are on hold.
+
 Build a Flutter plugin or app **with or without** a closed-source native SDK.
 
 Some native SDKs come as a binary you may not commit, publish or download
