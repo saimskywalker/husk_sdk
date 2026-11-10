@@ -150,6 +150,8 @@ void main() {
       expect(check.exitCode, exitProblems, reason: '$check');
       expect(check.err, isEmpty);
       final checkJson = jsonDecode(check.out) as Map<String, dynamic>;
+      expect(checkJson.keys.first, 'schemaVersion');
+      expect(checkJson['schemaVersion'], 1);
       expect(checkJson['exitCode'], exitProblems);
       final findings = [
         for (final section in checkJson['sections'] as List<dynamic>)

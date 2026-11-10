@@ -438,6 +438,7 @@ Map<String, Object> _reportJson(
   required int exitCode,
 }) {
   return {
+    'schemaVersion': 1,
     'sections': [
       for (final s in sections)
         if (_visible(s, strict).isNotEmpty)

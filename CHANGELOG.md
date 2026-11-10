@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 - `doctor` and `check` accept `--json`. It prints the same report as JSON
-  (`sections`, findings with `level`, `message` and `detail`, and the exit
+  (`schemaVersion` 1, `sections`, findings with `level`, `message` and `detail`, and the exit
   code `check` would use). Process exit codes are unchanged.
 - The README snippet and the example plugin report a missing vendor SDK
   with the error code `vendor_sdk_missing` (was `sdk_unavailable`). The

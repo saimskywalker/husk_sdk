@@ -316,7 +316,7 @@ dart run husk_sdk [-C <dir>] <command> [options]
 | `doctor` | Prints everything it found. `--from <dir>`, `--json`. | 0, 2 |
 | `check` | Prints warnings and errors. `--from <dir>`, `--require-sdk ios\|android` (repeatable), `--json`. | 0 fine, 1 errors, 2 usage or `husk.yaml` error |
 
-`--json` prints `{"sections":[{"title","findings":[{"level","message","detail"}]}],"exitCode"}`. `exitCode` is the code `check` would use (0 or 1). `doctor` still exits 0.
+`--json` prints `{"schemaVersion":1,"sections":[{"title","findings":[{"level","message","detail"}]}],"exitCode"}`. `exitCode` is the code `check` would use (0 or 1). `doctor` still exits 0.
 
 `check` fails when a generated file is missing or out of date, a plugin
 class does not register the generated channel, a found binary is broken
