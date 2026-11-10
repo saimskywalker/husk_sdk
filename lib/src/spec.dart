@@ -4,7 +4,6 @@ import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
 import 'names.dart';
-import 'paths.dart';
 
 /// Default spec file name, looked up in the project directory.
 const String specFileName = 'husk.yaml';
@@ -74,22 +73,12 @@ class HuskSpec {
         '$specFileName: ${e.message} (${e.span?.start.line})',
       );
     }
-    final top = _Node(doc, specFileName).map(const {
-      'sdk',
-      'plugin',
-      'shim',
-      'channel',
-      'binary',
-      'ios',
-      'android',
-      'dart',
-    });
-
-    final sdk = top.child('sdk').map(const {'name', 'version'});
+    const topKeys = 'sdk plugin shim channel binary ios android dart';
+    final top = _Node(doc, '').map(topKeys);
+    final sdk = top.child('sdk').map('name version');
     final sdkName = sdk.child('name').requiredString(identifier);
     final version = sdk.child('version').optionalString(versionPattern);
     final words = splitWords(sdkName);
-
     final plugin =
         top.child('plugin').optionalString(dartPackageName) ??
         _pubspecName(root) ??
@@ -100,128 +89,34 @@ class HuskSpec {
         top.child('shim').optionalString(identifier) ?? '${sdkName}Husk';
     final channel =
         top.child('channel').optionalString(channelPattern) ?? '$plugin/husk';
-
-    final binary = top.child('binary').mapOrEmpty(const {
-      'env',
-      'gradle_property',
-    });
+    final binary = top.child('binary').mapOrEmpty('env gradle_property');
     final envVar =
         binary.child('env').optionalString(identifier) ??
         '${screamingSnake(words)}_DIR';
     final gradleProperty =
         binary.child('gradle_property').optionalString(gradlePropertyPattern) ??
         '${lowerCamel(words)}Dir';
-
-    IosSpec? ios;
     final iosNode = top.child('ios');
-    if (iosNode.isPresent) {
-      final n = iosNode.mapOrEmpty(const {
-        'xcframework',
-        'package_dir',
-        'podspec',
-        'target',
-      });
-      final packageDir = n.child('package_dir').optionalPath() ?? 'ios/$plugin';
-      final String? podspec;
-      if (n.child('podspec').isExplicitNull ||
-          n.child('podspec').value == false) {
-        podspec = null;
-      } else {
-        podspec =
-            n.child('podspec').optionalPath() ??
-            (File(p.join(root, 'ios', '$plugin.podspec')).existsSync()
-                ? 'ios/$plugin.podspec'
-                : null);
-      }
-      ios = IosSpec(
-        xcframework:
-            n.child('xcframework').optionalString(xcframeworkName) ??
-            '$sdkName.xcframework',
-        packageDir: packageDir,
-        podspec: podspec,
-        target: n.child('target').optionalString(identifier) ?? plugin,
-      );
-    }
-
-    AndroidSpec? android;
+    final ios = iosNode.isPresent ? _ios(iosNode, root, sdkName, plugin) : null;
     final androidNode = top.child('android');
-    if (androidNode.isPresent) {
-      final n = androidNode.mapOrEmpty(const {
-        'aar',
-        'maven',
-        'module_dir',
-        'package',
-        'source_dir',
-      });
-      final moduleDir = n.child('module_dir').optionalPath() ?? 'android';
-      MavenSpec? maven;
-      final mavenNode = n.child('maven');
-      if (mavenNode.isPresent) {
-        final m = mavenNode.map(const {
-          'coordinates',
-          'url_property',
-          'url_env',
-          'username_property',
-          'password_property',
-        });
-        maven = MavenSpec(
-          coordinates: m.child('coordinates').requiredString(mavenCoordinates),
-          urlProperty:
-              m.child('url_property').optionalString(gradlePropertyPattern) ??
-              '${lowerCamel(words)}MavenUrl',
-          urlEnv:
-              m.child('url_env').optionalString(identifier) ??
-              '${screamingSnake(words)}_MAVEN_URL',
-          usernameProperty: m
-              .child('username_property')
-              .optionalString(gradlePropertyPattern),
-          passwordProperty: m
-              .child('password_property')
-              .optionalString(gradlePropertyPattern),
-        );
-        if (n.child('aar').isPresent) {
-          throw SpecException(
-            '$specFileName: android: set either aar or maven, not both',
-          );
-        }
-      }
-      final kotlinPackage =
-          n.child('package').optionalString(kotlinPackagePattern) ??
-          _gradleNamespace(p.join(root, p.joinAll(p.posix.split(moduleDir)))) ??
-          (throw SpecException(
-            '$specFileName: android.package: not set and no `namespace` '
-            'found in $moduleDir/build.gradle(.kts)',
-          ));
-      android = AndroidSpec(
-        aar: maven == null
-            ? n.child('aar').optionalString(aarGlob) ?? '*.aar'
-            : null,
-        maven: maven,
-        moduleDir: moduleDir,
-        kotlinPackage: kotlinPackage,
-        sourceDir: n.child('source_dir').optionalPath() ?? 'src/main/kotlin',
-      );
-    }
-
+    final android = androidNode.isPresent
+        ? _android(androidNode, root, words)
+        : null;
     if (ios == null && android == null) {
       throw SpecException(
         '$specFileName: configure at least one of `ios:` or `android:`',
       );
     }
-
-    final dartNode = top.child('dart').mapOrEmpty(const {'output', 'class'});
-    final dart = DartSpec(
-      output:
-          dartNode.child('output').optionalPath() ??
-          'lib/src/${snake(words)}_husk.g.dart',
-      className:
-          dartNode.child('class').optionalString(identifier) ??
-          '${upperCamel(words)}Husk',
-    );
-    if (!dart.output.endsWith('.dart')) {
+    final dart = top.child('dart').mapOrEmpty('output class');
+    final output =
+        dart.child('output').optionalPath() ??
+        'lib/src/${snake(words)}_husk.g.dart';
+    final className =
+        dart.child('class').optionalString(identifier) ??
+        '${upperCamel(words)}Husk';
+    if (!output.endsWith('.dart')) {
       throw SpecException('$specFileName: dart.output: must end in .dart');
     }
-
     return HuskSpec(
       root: root,
       sdkName: sdkName,
@@ -233,7 +128,7 @@ class HuskSpec {
       gradleProperty: gradleProperty,
       ios: ios,
       android: android,
-      dart: dart,
+      dart: DartSpec(output: output, className: className),
     );
   }
 
@@ -376,17 +271,84 @@ class DartSpec {
   final String className;
 }
 
+// The platform parsers read keys in a fixed order, so the first error
+// reported for a spec with several problems stays the same.
+IosSpec _ios(_Node node, String root, String sdkName, String plugin) {
+  final n = node.mapOrEmpty('xcframework package_dir podspec target');
+  final packageDir = n.child('package_dir').optionalPath() ?? 'ios/$plugin';
+  final podspec = n.child('podspec');
+  final skipPods =
+      podspec.isPresent && (podspec.value == null || podspec.value == false);
+  final defaultPodspec = File(p.join(root, 'ios', '$plugin.podspec'));
+  return IosSpec(
+    packageDir: packageDir,
+    podspec: skipPods
+        ? null
+        : podspec.optionalPath() ??
+              (defaultPodspec.existsSync() ? 'ios/$plugin.podspec' : null),
+    xcframework:
+        n.child('xcframework').optionalString(xcframeworkName) ??
+        '$sdkName.xcframework',
+    target: n.child('target').optionalString(identifier) ?? plugin,
+  );
+}
+
+AndroidSpec _android(_Node node, String root, List<String> words) {
+  final n = node.mapOrEmpty('aar maven module_dir package source_dir');
+  final moduleDir = n.child('module_dir').optionalPath() ?? 'android';
+  final m = n.child('maven');
+  const mavenKeys =
+      'coordinates url_property url_env username_property password_property';
+  final maven = m.isPresent ? _maven(m.map(mavenKeys), words) : null;
+  if (maven != null && n.child('aar').isPresent) {
+    throw SpecException(
+      '$specFileName: android: set either aar or maven, not both',
+    );
+  }
+  return AndroidSpec(
+    moduleDir: moduleDir,
+    maven: maven,
+    kotlinPackage:
+        n.child('package').optionalString(kotlinPackagePattern) ??
+        _gradleNamespace(p.join(root, p.joinAll(p.posix.split(moduleDir)))) ??
+        (throw SpecException(
+          '$specFileName: android.package: not set and no `namespace` '
+          'found in $moduleDir/build.gradle(.kts)',
+        )),
+    aar: maven == null
+        ? n.child('aar').optionalString(aarGlob) ?? '*.aar'
+        : null,
+    sourceDir: n.child('source_dir').optionalPath() ?? 'src/main/kotlin',
+  );
+}
+
+MavenSpec _maven(_Node m, List<String> words) => MavenSpec(
+  coordinates: m.child('coordinates').requiredString(mavenCoordinates),
+  urlProperty:
+      m.child('url_property').optionalString(gradlePropertyPattern) ??
+      '${lowerCamel(words)}MavenUrl',
+  urlEnv:
+      m.child('url_env').optionalString(identifier) ??
+      '${screamingSnake(words)}_MAVEN_URL',
+  usernameProperty: m
+      .child('username_property')
+      .optionalString(gradlePropertyPattern),
+  passwordProperty: m
+      .child('password_property')
+      .optionalString(gradlePropertyPattern),
+);
+
 String? _pubspecName(String root) {
   final file = File(p.join(root, 'pubspec.yaml'));
   if (!file.existsSync()) return null;
   try {
-    final doc = loadYaml(file.readAsStringSync());
-    if (doc is YamlMap && doc['name'] is String) {
-      final name = doc['name'] as String;
-      return dartPackageName.hasMatch(name) ? name : null;
+    if (loadYaml(file.readAsStringSync()) case {
+      'name': final String name,
+    } when dartPackageName.hasMatch(name)) {
+      return name;
     }
   } on YamlException {
-    return null;
+    // No usable name: the caller asks for `plugin:`.
   }
   return null;
 }
@@ -406,49 +368,56 @@ String? _gradleNamespace(String moduleDir) {
   return null;
 }
 
-/// A YAML value plus the key path used in error messages.
+/// A YAML value plus the key path used in error messages (empty for the
+/// top level).
 class _Node {
-  _Node(this.value, this.path, {this.isPresent = true, this.isNull = false});
+  _Node(this.value, this.path, {this.isPresent = true});
 
   final Object? value;
   final String path;
   final bool isPresent;
-  final bool isNull;
 
-  bool get isExplicitNull => isPresent && isNull;
+  Never _fail(String message) => throw SpecException(
+    '$specFileName: ${path.isEmpty ? specFileName : path}: $message',
+  );
 
-  Never _fail(String message) =>
-      throw SpecException('$specFileName: $path: $message');
-
-  _Map map(Set<String> allowed) {
-    if (value is! YamlMap) {
-      _fail(isPresent ? 'expected a map' : 'missing');
+  /// Checks that this is a map whose keys are among the space-separated
+  /// [allowed] names.
+  _Node map(String allowed) {
+    final v = value;
+    if (v is! YamlMap) _fail(isPresent ? 'expected a map' : 'missing');
+    final keys = allowed.split(' ')..sort();
+    for (final key in v.keys) {
+      if (key is! String || !keys.contains(key)) {
+        throw SpecException(
+          '$specFileName: ${path.isEmpty ? '' : '$path.'}$key: unknown key '
+          '(allowed: ${keys.join(', ')})',
+        );
+      }
     }
-    return _Map(value as YamlMap, path == specFileName ? '' : path, allowed)
-      .._checkKeys(this);
+    return this;
   }
 
-  _Map mapOrEmpty(Set<String> allowed) {
-    if (!isPresent || isNull || value == true) {
-      return _Map(YamlMap(), path, allowed);
-    }
-    return map(allowed);
+  /// Like [map], but a missing, empty or `true` value is an empty map.
+  _Node mapOrEmpty(String allowed) =>
+      value == null || value == true ? _Node(YamlMap(), path) : map(allowed);
+
+  _Node child(String key) {
+    final map = value as YamlMap;
+    return _Node(
+      map[key],
+      path.isEmpty ? key : '$path.$key',
+      isPresent: map.containsKey(key),
+    );
   }
 
-  String requiredString(RegExp pattern) {
-    if (!isPresent || isNull) _fail('missing');
-    return _string(pattern);
-  }
+  String requiredString(RegExp pattern) =>
+      optionalString(pattern) ?? _fail('missing');
 
   String? optionalString(RegExp pattern) {
-    if (!isPresent || isNull) return null;
-    return _string(pattern);
-  }
-
-  String _string(RegExp pattern) {
     final v = value;
-    final s = v is String ? v : (v is num ? '$v' : null);
-    if (s == null) _fail('expected a string');
+    if (v == null) return null;
+    final s = v is String ? v : (v is num ? '$v' : _fail('expected a string'));
     if (!pattern.hasMatch(s)) {
       _fail('"$s" is not valid here (expected ${describePattern(pattern)})');
     }
@@ -456,40 +425,13 @@ class _Node {
   }
 
   String? optionalPath() {
-    if (!isPresent || isNull) return null;
     final v = value;
+    if (v == null) return null;
     if (v is! String) _fail('expected a path');
     try {
       return normalizeRelative(v);
     } on FormatException catch (e) {
       _fail(e.message);
     }
-  }
-}
-
-class _Map {
-  _Map(this.map, this.path, this.allowed);
-
-  final YamlMap map;
-  final String path;
-  final Set<String> allowed;
-
-  void _checkKeys(_Node node) {
-    for (final key in map.keys) {
-      if (key is! String || !allowed.contains(key)) {
-        final where = path.isEmpty ? '' : '$path.';
-        throw SpecException(
-          '$specFileName: $where$key: unknown key '
-          '(allowed: ${(allowed.toList()..sort()).join(', ')})',
-        );
-      }
-    }
-  }
-
-  _Node child(String key) {
-    final full = path.isEmpty ? key : '$path.$key';
-    if (!map.containsKey(key)) return _Node(null, full, isPresent: false);
-    final v = map[key];
-    return _Node(v, full, isNull: v == null);
   }
 }

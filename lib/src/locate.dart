@@ -5,38 +5,33 @@ import 'package:path/path.dart' as p;
 import 'names.dart';
 import 'spec.dart';
 
-/// Where a vendor binary was found, and how.
-class Located {
-  /// Creates a location.
-  Located(this.path, this.via);
+/// Where a vendor binary was found: the absolute native path of the
+/// `.xcframework` directory or `.aar` file, and how it was found, e.g.
+/// `$ACME_WIDGET_SDK_DIR` or `husk_vendor/`.
+typedef Located = ({String path, String via});
 
-  /// Absolute native path of the `.xcframework` directory or `.aar` file.
-  final String path;
-
-  /// How it was found, e.g. `\$ACME_WIDGET_SDK_DIR` or `husk_vendor/`.
-  final String via;
-}
-
-/// The directory named by `--from` or the spec's environment variable, if
-/// any, with a label saying which one it was.
+/// The directories to search, in order: the one named by `--from` or else by
+/// the spec's environment variable, then [dropDir] when [includeDropDir].
 ///
 /// A `--from` path is relative to the working directory; an environment
 /// path is relative to [relativeTo], mirroring what the generated build
 /// files do.
-(String, String)? sourceDir(
+List<Located> _searchDirs(
   HuskSpec spec,
   Map<String, String> env, {
-  String? from,
+  required String? from,
   required String relativeTo,
+  required String dropDir,
+  required bool includeDropDir,
 }) {
-  if (from != null && from.isNotEmpty) {
-    return (p.normalize(p.absolute(from)), '--from');
-  }
   final value = env[spec.envVar];
-  if (value != null && value.isNotEmpty) {
-    return (p.normalize(p.join(relativeTo, value)), '\$${spec.envVar}');
-  }
-  return null;
+  return [
+    if (from != null && from.isNotEmpty)
+      (path: p.normalize(p.absolute(from)), via: '--from')
+    else if (value != null && value.isNotEmpty)
+      (path: p.normalize(p.join(relativeTo, value)), via: '\$${spec.envVar}'),
+    if (includeDropDir) (path: spec.resolve(dropDir), via: '$dropDir/'),
+  ];
 }
 
 /// Finds the xcframework the way the generated `Package.swift` does.
@@ -48,20 +43,18 @@ Located? locateXcframework(
 }) {
   final ios = spec.ios;
   if (ios == null) return null;
-  final source = sourceDir(
+  final dirs = _searchDirs(
     spec,
     env,
     from: from,
     relativeTo: spec.resolve(ios.packageDir),
+    dropDir: ios.dropDir,
+    includeDropDir: includeDropDir,
   );
-  final candidates = [
-    if (source != null) (p.join(source.$1, ios.xcframework), source.$2),
-    if (includeDropDir)
-      (p.join(spec.resolve(ios.dropDir), ios.xcframework), '${ios.dropDir}/'),
-  ];
-  for (final (path, via) in candidates) {
+  for (final dir in dirs) {
+    final path = p.join(dir.path, ios.xcframework);
     if (File(p.join(path, 'Info.plist')).existsSync()) {
-      return Located(path, via);
+      return (path: path, via: dir.via);
     }
   }
   return null;
@@ -90,18 +83,19 @@ List<String> matchingAars(HuskSpec spec, String dir) {
 }) {
   final android = spec.android;
   if (android == null || android.aar == null) return null;
-  final source = sourceDir(spec, env, from: from, relativeTo: spec.root);
-  final dirs = [
-    if (source != null) (source.$1, source.$2),
-    if (includeDropDir) (spec.resolve(android.dropDir), '${android.dropDir}/'),
-  ];
-  for (final (dir, via) in dirs) {
-    final matches = matchingAars(spec, dir);
+  final dirs = _searchDirs(
+    spec,
+    env,
+    from: from,
+    relativeTo: spec.root,
+    dropDir: android.dropDir,
+    includeDropDir: includeDropDir,
+  );
+  for (final dir in dirs) {
+    final matches = matchingAars(spec, dir.path);
     if (matches.isNotEmpty) {
-      return (
-        Located(matches.last, via),
-        matches.sublist(0, matches.length - 1),
-      );
+      final last = matches.removeLast();
+      return ((path: last, via: dir.via), matches);
     }
   }
   return null;

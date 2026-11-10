@@ -71,102 +71,104 @@ class XcframeworkInfo {
 XcframeworkInfo inspectXcframework(String path) {
   final findings = <Finding>[];
   final slices = <XcSlice>[];
+  final name = p.basename(path);
   void error(String m) => findings.add(Finding(Level.error, m));
   void warn(String m) => findings.add(Finding(Level.warning, m));
+  XcframeworkInfo done() => XcframeworkInfo(path, slices, findings);
 
-  final plistFile = File(p.join(path, 'Info.plist'));
-  Object? plist;
+  final Object? plist;
   try {
-    plist = parsePlist(plistFile.readAsBytesSync());
+    plist = parsePlist(File(p.join(path, 'Info.plist')).readAsBytesSync());
   } on FileSystemException {
-    error('${p.basename(path)} has no readable Info.plist');
-    return XcframeworkInfo(path, slices, findings);
+    error('$name has no readable Info.plist');
+    return done();
   } on FormatException catch (e) {
-    error('${p.basename(path)}/Info.plist: ${e.message}');
-    return XcframeworkInfo(path, slices, findings);
+    error('$name/Info.plist: ${e.message}');
+    return done();
   }
   final libraries = plist is Map ? plist['AvailableLibraries'] : null;
   if (libraries is! List || libraries.isEmpty) {
-    error('${p.basename(path)}/Info.plist lists no AvailableLibraries');
-    return XcframeworkInfo(path, slices, findings);
+    error('$name/Info.plist lists no AvailableLibraries');
+    return done();
   }
 
-  for (final entry in libraries) {
-    if (entry is! Map) continue;
-    final id = entry['LibraryIdentifier'];
-    final libraryPath = entry['LibraryPath'];
-    final platform = entry['SupportedPlatform'];
-    if (id is! String || libraryPath is! String || platform is! String) {
+  for (final entry in libraries.whereType<Map<Object?, Object?>>()) {
+    if (entry case {
+      'LibraryIdentifier': final String id,
+      'LibraryPath': final String libraryPath,
+      'SupportedPlatform': final String platform,
+    }) {
+      if (_unsafe(id) || _unsafe(libraryPath)) {
+        error('slice "$id" has a path that leaves the xcframework');
+        continue;
+      }
+      final libraryDir = p.join(path, id, libraryPath);
+      if (FileSystemEntity.typeSync(libraryDir) ==
+          FileSystemEntityType.notFound) {
+        error('slice $id is listed but $id/$libraryPath is missing');
+        continue;
+      }
+      String? version;
+      var binaryPath = entry['BinaryPath'];
+      if (libraryPath.endsWith('.framework')) {
+        final info = [
+          p.join(libraryDir, 'Info.plist'),
+          p.join(libraryDir, 'Resources', 'Info.plist'),
+          p.join(libraryDir, 'Versions', 'Current', 'Resources', 'Info.plist'),
+        ].map(File.new).where((f) => f.existsSync()).firstOrNull;
+        if (info != null) {
+          try {
+            if (parsePlist(info.readAsBytesSync()) case {
+              'CFBundleShortVersionString': final String v,
+            }) {
+              version = v;
+            }
+          } on FormatException catch (e) {
+            warn('$id/$libraryPath Info.plist: ${e.message}');
+          }
+        }
+        binaryPath ??= p.join(
+          libraryPath,
+          p.basenameWithoutExtension(libraryPath),
+        );
+      } else {
+        binaryPath ??= libraryPath;
+      }
+      var linkage = Linkage.unknown;
+      if (binaryPath is String && !_unsafe(binaryPath)) {
+        final binary = File(p.join(path, id, binaryPath));
+        if (binary.existsSync()) {
+          linkage = detectLinkage(binary);
+        } else {
+          error('slice $id: binary $binaryPath is missing');
+        }
+      }
+      final variant = entry['SupportedPlatformVariant'];
+      final archs = entry['SupportedArchitectures'];
+      slices.add(
+        XcSlice(
+          identifier: id,
+          platform: platform,
+          variant: variant is String ? variant : null,
+          architectures: archs is List
+              ? [for (final a in archs) '$a']
+              : const [],
+          libraryPath: libraryPath,
+          linkage: linkage,
+          version: version,
+        ),
+      );
+    } else {
       error(
         'an AvailableLibraries entry lacks LibraryIdentifier, '
         'LibraryPath or SupportedPlatform',
       );
-      continue;
     }
-    if (_unsafe(id) || _unsafe(libraryPath)) {
-      error('slice "$id" has a path that leaves the xcframework');
-      continue;
-    }
-    final variant = entry['SupportedPlatformVariant'];
-    final archs = entry['SupportedArchitectures'];
-    final libraryDir = p.join(path, id, libraryPath);
-    if (FileSystemEntity.typeSync(libraryDir) ==
-        FileSystemEntityType.notFound) {
-      error('slice $id is listed but $id/$libraryPath is missing');
-      continue;
-    }
-
-    String? version;
-    var binaryPath = entry['BinaryPath'];
-    if (libraryPath.endsWith('.framework')) {
-      final name = p.basenameWithoutExtension(libraryPath);
-      for (final candidate in [
-        p.join(libraryDir, 'Info.plist'),
-        p.join(libraryDir, 'Resources', 'Info.plist'),
-        p.join(libraryDir, 'Versions', 'Current', 'Resources', 'Info.plist'),
-      ]) {
-        final f = File(candidate);
-        if (!f.existsSync()) continue;
-        try {
-          final info = parsePlist(f.readAsBytesSync());
-          if (info is Map && info['CFBundleShortVersionString'] is String) {
-            version = info['CFBundleShortVersionString'] as String;
-          }
-        } on FormatException catch (e) {
-          warn('$id/$libraryPath Info.plist: ${e.message}');
-        }
-        break;
-      }
-      binaryPath ??= p.join(libraryPath, name);
-    } else {
-      binaryPath ??= libraryPath;
-    }
-    var linkage = Linkage.unknown;
-    if (binaryPath is String && !_unsafe(binaryPath)) {
-      final binary = File(p.join(path, id, binaryPath));
-      if (binary.existsSync()) {
-        linkage = detectLinkage(binary);
-      } else {
-        error('slice $id: binary $binaryPath is missing');
-      }
-    }
-    slices.add(
-      XcSlice(
-        identifier: id,
-        platform: platform,
-        variant: variant is String ? variant : null,
-        architectures: archs is List ? [for (final a in archs) '$a'] : const [],
-        libraryPath: libraryPath,
-        linkage: linkage,
-        version: version,
-      ),
-    );
   }
 
   final ios = slices.where((s) => s.platform == 'ios');
-  final device = ios.where((s) => s.variant == null);
   final simulator = ios.where((s) => s.variant == 'simulator');
-  if (device.isEmpty) {
+  if (!ios.any((s) => s.variant == null)) {
     error('no iOS device slice (ios, arm64): device builds cannot link it');
   }
   if (simulator.isEmpty) {
@@ -182,10 +184,8 @@ XcframeworkInfo inspectXcframework(String path) {
     warn('slices report different versions: ${versions.join(', ')}');
   }
   final linkages = {for (final s in slices) s.linkage}..remove(Linkage.unknown);
-  if (linkages.length > 1) {
-    warn('some slices are static and some dynamic');
-  }
-  return XcframeworkInfo(path, slices, findings);
+  if (linkages.length > 1) warn('some slices are static and some dynamic');
+  return done();
 }
 
 bool _unsafe(String relative) =>
