@@ -8,8 +8,8 @@
 - Native mode for plain iOS and Android apps without Flutter: `mode: native`
   in `husk.yaml` (or `init --native`) makes `generate` write a standalone
   Swift package and a `husk.gradle` for the app module, which link the
-  vendor binary when it is found and a stub otherwise. `link`, `unlink`,
-  `doctor` and `check` work unchanged.
+  vendor binary when it is found and a stub otherwise. `link` and `unlink`
+  work unchanged; `doctor` and `check` skip the plugin-only checks.
 - Internal simplification: less code, no change in behaviour.
 - The README snippet and the example plugin report a missing vendor SDK
   with the error code `vendor_sdk_missing` (was `sdk_unavailable`). The

@@ -303,9 +303,12 @@ class, so `plugin`, `channel`, `dart`, `ios.podspec`, `ios.target` and
 
 Apply `husk.gradle` to an app module: it depends on the AAR file directly,
 which works with settings that forbid project repositories, but not in a
-library module that is packaged as an AAR. A Maven SDK still adds its
-repository to the project. `link`, `unlink`, `doctor` and `check` work as for
-a plugin. [example/native_app](example/native_app/) builds both ways in CI.
+library module that is packaged as an AAR. A Maven SDK adds its repository
+to the project, which Gradle refuses when settings forbid project
+repositories (`FAIL_ON_PROJECT_REPOS`, the Android Studio default); declare
+that repository under `dependencyResolutionManagement` instead. `link` and
+`unlink` work as for a plugin; `doctor` and `check` skip the plugin-only
+checks. [example/native_app](example/native_app/) builds both ways in CI.
 
 ## Getting the binary to the build
 
