@@ -6,6 +6,8 @@
 
 - [ ] `dart format --output=none --set-exit-if-changed .` and `dart analyze --fatal-infos` are clean
 - [ ] `dart test` passes
+- [ ] Closes an issue labelled `accepted`; at most 400 changed lines; no `// ignore:`, `@Suppress(` or `swiftlint:disable` (checked)
+- [ ] Changes to `lib/`, `bin/` or the example's sources come with a test (checked)
 - [ ] If this fixes a bug: there is a test that fails without the fix
 - [ ] Changed generated build files: `dart run husk_sdk generate` re-run in `example/acme_widget`, and the example builds with and without the fake SDK
 - [ ] User-visible change: `CHANGELOG.md` entry
