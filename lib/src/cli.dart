@@ -80,12 +80,12 @@ const _commands = <String, (String, List<(String, String?, String)>)>{
     'CI gate. Exit 0: fine, 1: problems, 2: usage or husk.yaml error.',
     [
       ('from', 'dir', _fromHelp),
+      ('json', null, _jsonHelp),
       (
         'require-sdk',
         'platform',
         'Fail when the SDK binary for this platform is missing.',
       ),
-      ('json', null, _jsonHelp),
     ],
   ),
 };
