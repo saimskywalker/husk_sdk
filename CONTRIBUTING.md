@@ -51,10 +51,10 @@ merged. The `PR rules` check enforces these:
 
 - **Issue first.** Open an issue and wait until a maintainer labels it
   `accepted`, then write `Closes #N` in the pull request.
-- **Tests.** Every change to `lib/`, `bin/`, `example/fake_vendor_sdk/src/`
-  or the Dart, Kotlin, Java or Swift sources of `example/acme_widget/` needs
-  a test change under `test/` (or one of the example's test folders). A bug
-  fix needs a test that fails without the fix.
+- **Tests.** Every change to `lib/`, `bin/` or the Dart, Kotlin, Java or
+  Swift sources of the projects under `example/` needs a test change under
+  `test/` (or an example's own test folder). A bug fix needs a test that
+  fails without the fix.
 - **Small.** At most 400 changed lines (lock files not counted), one issue
   per pull request.
 - **No suppressions.** No `// ignore:`, `@Suppress(`, `@SuppressWarnings(` or

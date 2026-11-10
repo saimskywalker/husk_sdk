@@ -15,9 +15,9 @@ env:
   GH_TOKEN: ${{ github.token }}
   PR: ${{ github.event.pull_request.number }}
   AUTHOR: ${{ github.event.pull_request.user.login }}
-  # The tool, the fake SDK, and the example plugin and app (Dart, Kotlin, Java, Swift).
-  CODE: '^((lib|bin|example/fake_vendor_sdk/src)/|example/acme_widget/(lib|android/src/(main|husk)|ios/acme_widget/Sources|example/(lib|android/app/src/main|ios/Runner))/.*\.(dart|kt|java|swift)$)'
-  TESTS: '^(test|example/acme_widget/(test|android/src/(test|androidTest)|example/(test|integration_test|ios/RunnerTests|android/app/src/(test|androidTest))))/'
+  # The tool, the fake SDK, and the example plugin, its app and the native app (Dart, Kotlin, Java, Swift).
+  CODE: '^((lib|bin|example/fake_vendor_sdk/src)/|example/(acme_widget/(lib|android/src/(main|husk)|ios/acme_widget/Sources|example/(lib|android/app/src/main|ios/Runner))|native_app/(android/app/src/(main|husk)|ios/AcmeWidgetSDKHusk/Sources))/.*\.(dart|kt|java|swift)$)'
+  TESTS: '^(test|example/(acme_widget/(test|android/src/(test|androidTest)|example/(test|integration_test|ios/RunnerTests|android/app/src/(test|androidTest)))|native_app/(android/app/src/(test|androidTest)|ios/AcmeWidgetSDKHusk/Tests)))/'
   MAX_LINES: 400
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
         run: |
           files="$(jq -r '.[].filename' "$RUNNER_TEMP/files.json")"
           if grep -Eq "$CODE" <<<"$files" && ! grep -Eq "$TESTS" <<<"$files"; then
-            echo "::error title=Tests required::This PR changes code (lib/, bin/ or the example's sources) but no test. Add a test under test/."
+            echo "::error title=Tests required::This PR changes code (lib/, bin/ or an example's sources) but no test. Add a test under test/."
             exit 1
           fi
 
